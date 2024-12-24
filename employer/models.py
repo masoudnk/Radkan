@@ -1,22 +1,101 @@
+import os
+import uuid
+
 from django.core.validators import MinLengthValidator, int_list_validator
 from django.db import models
+from django.utils import timezone
 from django_jalali.db import models as jmodels
 from phonenumber_field.modelfields import PhoneNumberField
 
-from base.models import get_file_path, City
+from base.models import City
+from base.utilities import get_random_int_code
 
 
 class LegalEntityType(models.Model):
     name = models.CharField(max_length=250)
 
 
-class Employer(models.Model):
-    national_code = models.CharField(max_length=250)
-    email = models.EmailField(null=True, blank=True, verbose_name='ایمیل')
-    image = models.ImageField(upload_to=get_file_path, max_length=255, verbose_name='عکس پروفایل')
-    mobile = PhoneNumberField(unique=True, verbose_name='شماره همراه')
-    name = models.CharField(max_length=255, verbose_name='نام کاربری')
-    password = models.CharField(max_length=255, verbose_name='رمز عبور')
+def get_employer_image_file_path(instance, filename, ):
+    ext = filename.split('.')[-1]
+    filename = "%s.%s" % (uuid.uuid4().hex, ext)
+    return os.path.join('EmployerImage/' + uuid.uuid4().hex, filename)
+
+
+from django.db import models
+from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, _user_has_perm, _user_has_module_perms
+
+
+# Create your models here.
+class CustomUserManager(BaseUserManager):
+
+    def create_user(self, username, password=None):
+        if not username:
+            raise ValueError('Users must have an username')
+        user = self.model(
+            username=username,
+        )
+        user.set_password(password)
+        user.save(using=self._db)
+
+        return user
+
+    def create_superuser(self, username, password):
+        user = self.create_user(
+            username,
+            password=password,
+        )
+        user.is_staff = True
+        user.is_superuser = True
+        user.save(using=self._db)
+        return user
+
+
+class User(AbstractBaseUser, PermissionsMixin):
+    email = models.EmailField(
+        verbose_name='email address',
+        max_length=255,
+        # unique=True,
+    )
+    username = models.CharField(max_length=255, verbose_name='نام کاربری',unique=True)
+    mobile = PhoneNumberField(
+        # unique=True,
+        verbose_name='شماره همراه')
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)  # a admin user; non super-user
+    is_admin = models.BooleanField(default=False)
+    is_superuser = models.BooleanField(default=False)
+    date_joined = models.DateTimeField("date joined", default=timezone.now)
+    objects = CustomUserManager()
+    # notice the absence of a "Password field", that is built in.
+
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = []
+
+
+    def has_perm(self, perm, obj=None):
+        if self.is_active and self.is_superuser:
+            return True
+        return _user_has_perm(self, perm, obj)
+
+
+    def has_module_perms(self, app_label):
+        if self.is_active and self.is_superuser:
+            return True
+
+        return _user_has_module_perms(self, app_label)
+
+
+
+class ResetPasswordRequest(models.Model):
+    user = models.ForeignKey(User, on_delete=models.PROTECT)
+    code=models.PositiveSmallIntegerField(default=get_random_int_code)
+    active = models.BooleanField(default=True)
+    request_date= jmodels.jDateTimeField(auto_now_add=True)
+
+class Employer(User):
+    accepted_rules=models.BooleanField(default=False)
+    national_code = models.CharField(max_length=250,null=True, blank=True)
+    image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل',null=True, blank=True)
     gender_choices = (
         (True, 'آقا'),
         (False, 'خانم'),
@@ -28,19 +107,19 @@ class Employer(models.Model):
     )
     personality = models.PositiveSmallIntegerField(default=personality_choices[0][0], choices=personality_choices, verbose_name='نوع کاربری')
     birth_date = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ تولد')
-    phone = PhoneNumberField(verbose_name='تلفن')
+    phone = PhoneNumberField(verbose_name='تلفن',null=True, blank=True)
     postal_code = models.CharField(max_length=10, validators=[int_list_validator(sep=''), MinLengthValidator(10), ], null=True, blank=True, )
     address = models.TextField(null=True, blank=True, verbose_name="آدرس")
-    referrer = models.ForeignKey("self", on_delete=models.PROTECT)
-    company_name = models.CharField(max_length=250)
+    referrer = models.ForeignKey("self", on_delete=models.PROTECT,null=True,blank=True)
+    company_name = models.CharField(max_length=250,null=True, blank=True)
     legal_entity_type = models.ForeignKey(LegalEntityType, on_delete=models.PROTECT, null=True, blank=True)
     company_registration_date = models.DateField(null=True, blank=True)
     company_registration_number = models.PositiveIntegerField(null=True, blank=True)
-    branch_name = models.CharField(max_length=250)
+    branch_name = models.CharField(max_length=250, null=True, blank=True)
     economical_code = models.PositiveIntegerField(null=True, blank=True)
 
     def __str__(self):
-        return self.name
+        return self.username
 
 
 class AttendanceDeviceBrand(models.Model):
@@ -190,3 +269,75 @@ class WorkShift(models.Model):
     first_period_end = models.TimeField(null=True, blank=True)
     second_period_start = models.TimeField(null=True, blank=True)
     second_period_end = models.TimeField(null=True, blank=True)
+
+
+
+class Employee(User):
+    # gender_choices = (
+    #     (True, 'آقا'),
+    #     (False, 'خانم'),
+    # )
+    # male_gender = models.BooleanField(null=True, blank=True, default=gender_choices[0][0], choices=gender_choices, verbose_name='جنسیت')
+    # birth_date = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ تولد')
+    # image = models.ImageField(upload_to=get_file_path, max_length=255, verbose_name='عکس پروفایل')
+    # mobile = PhoneNumberField(unique=True, verbose_name='شماره همراه')
+    # email = models.EmailField(null=True, blank=True, verbose_name='ایمیل')
+    first_name = models.CharField(max_length=255, verbose_name='نام')
+    last_name = models.CharField(max_length=255, verbose_name='نام خانوادگی')
+    # user_name = models.CharField(max_length=255, verbose_name='نام کاربری')
+    # password = models.CharField(max_length=255, verbose_name='رمز عبور')
+    national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی")
+    personnel_code = models.CharField(max_length=250)
+    workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT)
+    work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT)
+    work_shift = models.ForeignKey(WorkShift, on_delete=models.PROTECT)
+    shift_start_date = models.DateField()
+    shift_end_date = models.DateField()
+    use_gps = models.BooleanField(default=False)
+    use_wifi = models.BooleanField(default=False)
+    device_choices = (
+        (1, 'اپلیکیشن وب (pwa)'),
+        (2, 'اپلیکیشن اندروید'),
+        (3, 'هر دو نوع دستگاه (وب و اندروید)'),
+        (4, 'دستگاه حضور و غیاب'),
+    )
+    limit_devices = models.PositiveSmallIntegerField(choices=device_choices, default=device_choices[0][0])
+    interception = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.first_name + " " + self.last_name
+
+
+class EmployeeRequestCategory(models.Model):
+    name = models.CharField(max_length=250)
+
+
+class EmployeeRequest(models.Model):
+    category = models.ForeignKey(EmployeeRequestCategory, on_delete=models.PROTECT)
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    registration_date = models.DateField(auto_now_add=True)
+    action_choices = (
+        (1, "در دست بررسی"),
+        (2, "تایید شده"),
+        (3, "تایید شده"),
+    )
+
+class Project(models.Model):
+    name = models.CharField(max_length=250)
+    status = models.BooleanField()
+    employee = models.ManyToManyField(Employee)
+
+
+class WorkCategory(models.Model):
+    name = models.CharField(max_length=250)
+    parent = models.ForeignKey("self", on_delete=models.PROTECT,null=True, blank=True)
+    employee = models.ManyToManyField(Employee)
+
+
+class RadkanMessage(models.Model):
+    title = models.CharField(max_length=250)
+    description = models.TextField()
+    work_category = models.ForeignKey(WorkCategory, on_delete=models.PROTECT)
+    employee = models.ManyToManyField(Employee)
