@@ -5,10 +5,11 @@ from django.core.validators import MinLengthValidator, int_list_validator
 from django.db import models
 from django.utils import timezone
 from django_jalali.db import models as jmodels
+from mptt.fields import TreeForeignKey
+from mptt.models import MPTTModel
 from phonenumber_field.modelfields import PhoneNumberField
 
-from base.models import City
-from base.utilities import get_random_int_code
+from employer.utilities import get_random_int_code
 
 
 class LegalEntityType(models.Model):
@@ -24,24 +25,25 @@ def get_employer_image_file_path(instance, filename, ):
 from django.db import models
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, _user_has_perm, _user_has_module_perms
 
+from django.contrib.auth.models import Permission
 
-# Create your models here.
+
 class CustomUserManager(BaseUserManager):
 
-    def create_user(self, username, password=None):
-        if not username:
+    def create_user(self, mobile, password=None):
+        if not mobile:
             raise ValueError('Users must have an username')
         user = self.model(
-            username=username,
+            mobile=mobile,
         )
         user.set_password(password)
         user.save(using=self._db)
 
         return user
 
-    def create_superuser(self, username, password):
+    def create_superuser(self, mobile, password):
         user = self.create_user(
-            username,
+            mobile,
             password=password,
         )
         user.is_staff = True
@@ -56,9 +58,9 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=255,
         # unique=True,
     )
-    username = models.CharField(max_length=255, verbose_name='نام کاربری',unique=True)
+    username = models.CharField(max_length=255, verbose_name='نام کاربری', unique=True)
     mobile = PhoneNumberField(
-        # unique=True,
+        unique=True,
         verbose_name='شماره همراه')
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)  # a admin user; non super-user
@@ -68,34 +70,33 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
     # notice the absence of a "Password field", that is built in.
 
-    USERNAME_FIELD = 'username'
+    USERNAME_FIELD = 'mobile'
     REQUIRED_FIELDS = []
 
-
+    def __str__(self):
+        return str(self.mobile)
     def has_perm(self, perm, obj=None):
         if self.is_active and self.is_superuser:
             return True
         return _user_has_perm(self, perm, obj)
 
-
     def has_module_perms(self, app_label):
         if self.is_active and self.is_superuser:
             return True
-
         return _user_has_module_perms(self, app_label)
-
 
 
 class ResetPasswordRequest(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT)
-    code=models.PositiveSmallIntegerField(default=get_random_int_code)
+    code = models.PositiveSmallIntegerField(default=get_random_int_code)
     active = models.BooleanField(default=True)
-    request_date= jmodels.jDateTimeField(auto_now_add=True)
+    request_date = jmodels.jDateTimeField(auto_now_add=True)
+
 
 class Employer(User):
-    accepted_rules=models.BooleanField(default=False)
-    national_code = models.CharField(max_length=250,null=True, blank=True)
-    image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل',null=True, blank=True)
+    accepted_rules = models.BooleanField(default=False)
+    national_code = models.CharField(max_length=250, null=True, blank=True)
+    image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل', null=True, blank=True)
     gender_choices = (
         (True, 'آقا'),
         (False, 'خانم'),
@@ -107,14 +108,15 @@ class Employer(User):
     )
     personality = models.PositiveSmallIntegerField(default=personality_choices[0][0], choices=personality_choices, verbose_name='نوع کاربری')
     birth_date = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ تولد')
-    phone = PhoneNumberField(verbose_name='تلفن',null=True, blank=True)
+    phone = PhoneNumberField(verbose_name='تلفن', null=True, blank=True)
     postal_code = models.CharField(max_length=10, validators=[int_list_validator(sep=''), MinLengthValidator(10), ], null=True, blank=True, )
     address = models.TextField(null=True, blank=True, verbose_name="آدرس")
-    referrer = models.ForeignKey("self", on_delete=models.PROTECT,null=True,blank=True)
-    company_name = models.CharField(max_length=250,null=True, blank=True)
+    referrer = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True)
+    company_name = models.CharField(max_length=250, null=True, blank=True)
     legal_entity_type = models.ForeignKey(LegalEntityType, on_delete=models.PROTECT, null=True, blank=True)
     company_registration_date = models.DateField(null=True, blank=True)
     company_registration_number = models.PositiveIntegerField(null=True, blank=True)
+    company_national_id = models.PositiveIntegerField(null=True, blank=True)
     branch_name = models.CharField(max_length=250, null=True, blank=True)
     economical_code = models.PositiveIntegerField(null=True, blank=True)
 
@@ -138,16 +140,17 @@ class AttendanceDevice(models.Model):
 
 
 class Workplace(models.Model):
-    gender_choices = (
-        (1, 'دایره'),
-        (2, 'چند ضلعی'),
-    )
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
+    # gender_choices = (
+    #     (1, 'دایره'),
+    #     (2, 'چند ضلعی'),
+    # )
     name = models.CharField(max_length=250)
-    city = models.ForeignKey(City, on_delete=models.PROTECT)
+    province = models.ForeignKey("Province", on_delete=models.PROTECT)
+    city = models.ForeignKey("City", on_delete=models.PROTECT)
     address = models.TextField(null=True, blank=True, )
-    shape = models.PositiveSmallIntegerField(null=True, blank=True, default=gender_choices[0][0], choices=gender_choices, verbose_name='شکل هندسی محل کار')
+    # shape = models.PositiveSmallIntegerField(null=True, blank=True, default=gender_choices[0][0], choices=gender_choices, verbose_name='شکل هندسی محل کار')
     radius = models.PositiveSmallIntegerField(default=50, verbose_name="شعاع(متر)")
-
     latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
     longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
     BSSID = models.CharField(max_length=250)
@@ -157,6 +160,7 @@ class Workplace(models.Model):
 
 
 class WorkPolicy(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
     description = models.TextField(null=True, blank=True)
 
@@ -176,9 +180,10 @@ class BasePolicy(models.Model):
 
 
 class ManualTrafficPolicy(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     work_policy = models.OneToOneField(WorkPolicy, on_delete=models.PROTECT)
-    maximum_per_year = models.PositiveSmallIntegerField(help_text="minutes")
-    maximum_per_month = models.PositiveSmallIntegerField(help_text="minutes")
+    maximum_per_year = models.PositiveSmallIntegerField()
+    maximum_per_month = models.PositiveSmallIntegerField()
     acceptable_registration_days = models.PositiveSmallIntegerField()
 
 
@@ -191,19 +196,23 @@ class SecondPolicy(BasePolicy):
 
 
 class OvertimePolicy(SecondPolicy):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     acceptable_registration_days = models.PositiveSmallIntegerField()
 
 
 class LeavePolicy(SecondPolicy):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     maximum_hourly_request_per_year = models.PositiveSmallIntegerField()
     maximum_hourly_request_per_month = models.PositiveSmallIntegerField()
     acceptable_registration_type_choices = (
         (1, 'قبل'),
         (2, 'بعد'),
     )
-    acceptable_daily_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
+    acceptable_daily_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, )
+    # acceptable_daily_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
     acceptable_daily_registration_days = models.PositiveSmallIntegerField()
-    acceptable_hourly_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
+    acceptable_hourly_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, )
+    # acceptable_hourly_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
     acceptable_hourly_registration_days = models.PositiveSmallIntegerField()
 
     class Meta:
@@ -211,21 +220,27 @@ class LeavePolicy(SecondPolicy):
 
 
 class EarnedLeavePolicy(LeavePolicy):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     year = models.PositiveSmallIntegerField()
-    maximum_earned_leave_for_next_year = models.PositiveSmallIntegerField(help_text="minutes")
+    maximum_earned_leave_for_next_year_hour = models.PositiveSmallIntegerField(help_text="hour")
+    maximum_earned_leave_for_next_year_minutes = models.PositiveSmallIntegerField(help_text="minutes")
+
+    class Meta:
+        permissions = [("update", "update EarnedLeavePolicy")]
 
 
 class SickLeavePolicy(LeavePolicy):
-    pass
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
 
 
 class WorkMissionPolicy(LeavePolicy):
-    pass
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
 
 
 class Holiday(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
-    date = models.DateField()
+    date = jmodels.jDateField()
 
     def __str__(self):
         return self.name
@@ -253,9 +268,25 @@ class Holiday(models.Model):
 #
 
 class WorkShift(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
+    maximum_shiftless_day_overtime = models.PositiveSmallIntegerField(help_text="minutes")
+    observance_of_public_holidays = models.BooleanField(default=False)
+    year = models.PositiveSmallIntegerField()
+
+
+
+class WorkShiftPlan(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
+    work_shift = models.ForeignKey(WorkShift, on_delete=models.CASCADE)
     date = jmodels.jDateField()
-    floating_time = models.PositiveSmallIntegerField()
+    plan_type_choices = (
+        (1, "ساده"),
+        (2, "شناور"),
+    )
+    plan_type = models.PositiveSmallIntegerField(choices=plan_type_choices, default=plan_type_choices[0][0])
+    daily_duty_duration = models.PositiveSmallIntegerField(help_text="minutes",null=True,blank=True)
+    floating_time = models.PositiveSmallIntegerField(help_text="minutes",null=True,blank=True)
     daily_overtime_limit = models.PositiveSmallIntegerField()
     beginning_overtime = models.PositiveSmallIntegerField(null=True, blank=True)
     middle_overtime = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -265,11 +296,15 @@ class WorkShift(models.Model):
     pre_shift_floating = models.PositiveSmallIntegerField(null=True, blank=True)
     permitted_traffic_start = models.TimeField(null=True, blank=True)
     permitted_traffic_end = models.TimeField(null=True, blank=True)
+    is_night_shift = models.BooleanField(default=False)
+    reset_time = models.TimeField(null=True, blank=True)
     first_period_start = models.TimeField(null=True, blank=True)
     first_period_end = models.TimeField(null=True, blank=True)
     second_period_start = models.TimeField(null=True, blank=True)
     second_period_end = models.TimeField(null=True, blank=True)
 
+    class Meta:
+        unique_together=("work_shift", "date")
 
 
 class Employee(User):
@@ -282,6 +317,7 @@ class Employee(User):
     # image = models.ImageField(upload_to=get_file_path, max_length=255, verbose_name='عکس پروفایل')
     # mobile = PhoneNumberField(unique=True, verbose_name='شماره همراه')
     # email = models.EmailField(null=True, blank=True, verbose_name='ایمیل')
+    employer_id = models.PositiveIntegerField()
     first_name = models.CharField(max_length=255, verbose_name='نام')
     last_name = models.CharField(max_length=255, verbose_name='نام خانوادگی')
     # user_name = models.CharField(max_length=255, verbose_name='نام کاربری')
@@ -313,6 +349,7 @@ class EmployeeRequestCategory(models.Model):
 
 
 class EmployeeRequest(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT, null=True, blank=True)
     category = models.ForeignKey(EmployeeRequestCategory, on_delete=models.PROTECT)
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
     start_date = models.DateField()
@@ -324,20 +361,78 @@ class EmployeeRequest(models.Model):
         (3, "تایید شده"),
     )
 
+
 class Project(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
     status = models.BooleanField()
     employee = models.ManyToManyField(Employee)
 
 
-class WorkCategory(models.Model):
+class WorkCategory(MPTTModel):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
-    parent = models.ForeignKey("self", on_delete=models.PROTECT,null=True, blank=True)
+    parent = TreeForeignKey("self", related_name='children', on_delete=models.PROTECT, null=True, blank=True)
     employee = models.ManyToManyField(Employee)
+
+    class MPTTMeta:
+        order_insertion_by = ['name']
 
 
 class RadkanMessage(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     title = models.CharField(max_length=250)
     description = models.TextField()
     work_category = models.ForeignKey(WorkCategory, on_delete=models.PROTECT)
     employee = models.ManyToManyField(Employee)
+
+
+def get_ticket_attachment_file_path(instance, filename, ):
+    ext = filename.split('.')[-1]
+    filename = "%s.%s" % (uuid.uuid4().hex, ext)
+    return os.path.join('TicketAttachments/' + uuid.uuid4().hex, filename)
+
+
+class Province(models.Model):
+    name = models.CharField(max_length=255, verbose_name='استان')
+
+    class Meta:
+        verbose_name = 'استان'
+        verbose_name_plural = 'استان ها'
+
+    def __str__(self):
+        return self.name
+
+
+class City(models.Model):
+    parent = models.ForeignKey(Province, on_delete=models.CASCADE, verbose_name='استان')
+    name = models.CharField(max_length=255, verbose_name='نام')
+
+    # latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
+    # longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
+
+    class Meta:
+        verbose_name = 'شهر'
+        verbose_name_plural = 'شهر ها'
+
+    def __str__(self):
+        return self.name
+
+
+class TicketSection(models.Model):
+    name = models.CharField(max_length=250)
+
+
+class Ticket(models.Model):
+    user = models.ForeignKey(User, on_delete=models.PROTECT)
+    title = models.CharField(max_length=250)
+    # section_choices = (
+    #     ("SUPPORT", "پشتیبانی"),
+    #     ("SALE", "فروش"),
+    #     ("ADMINISTRATIVE", "اداری و مالی")
+    # )
+    # section = models.CharField(max_length=250)
+    section = models.ForeignKey(TicketSection, on_delete=models.PROTECT)
+    description = models.TextField()
+
+    attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
