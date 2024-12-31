@@ -19,6 +19,7 @@ from django.urls import path
 from employer import views, policy_views
 
 urlpatterns = [
+    path('test/', views.test, name='test'),
     path('get_user_permissions/', views.get_user_permissions, name='get_user_permissions'),
     path('create_employer/', views.create_employer, name='create_employer'),
     path('change_password/', views.change_password, name='password_reset'),
@@ -27,6 +28,7 @@ urlpatterns = [
     path('get_workplaces_list/', views.get_workplaces_list, name='get_workplaces_list'),
     path('create_employee/', views.create_employee, name='create_employee'),
     path('create_holiday/', views.create_holiday, name='create_holiday'),
+    path('get_holidays_list/', views.get_holidays_list, name='get_holidays_list'),
     path('create_work_category/', views.create_work_category, name='create_work_category'),
     path('get_provinces/', views.get_provinces, name='get_provinces'),
     path('get_cities/', views.get_cities, name='get_cities'),
@@ -42,6 +44,20 @@ urlpatterns = [
     path('create_work_shift_plan/', views.create_work_shift_plan, name='create_work_shift_plan'),
     path('get_work_shift_plans_list/', views.get_work_shift_plans_list, name='get_work_shift_plans_list'),
     path('get_work_shift_plan_type_choices/', views.get_work_shift_plan_type_choices, name='get_work_shift_plan_type_choices'),
+    path('update_work_shift_plan/', views.update_work_shift_plan, name='update_work_shift_plan'),
+    path('create_manager/', views.create_manager, name='create_manager'),
+    path('get_permissions/', views.get_permissions, name='get_permissions'),
+    path('get_employer_dashboard/', views.get_employer_dashboard, name='get_employer_dashboard'),
+    path('get_workplaces_excel/', views.get_workplaces_excel, name='get_workplaces_excel'),
+    path('search_workplaces/', views.search_workplaces, name='search_workplaces'),
+    path('search_work_shift/', views.search_work_shift, name='search_work_shift'),
+    path('get_employees_excel/', views.get_employees_excel, name='get_employees_excel'),
+    path('search_employees/', views.search_employees, name='search_employees'),
+    path('get_employees_list/', views.get_employees_list, name='get_employees_list'),
+    path('get_employee_requests_excel/', views.get_employee_requests_excel, name='get_employee_requests_excel'),
+
+    path('delete_workplace/<int:oid>/', views.delete_workplace, name='delete_workplace'),
+    path('delete_work_shift/<int:oid>/', views.delete_work_shift, name='delete_work_shift'),
 
     # ----------------------------------------------------------------
     path('create_work_policy/', policy_views.create_work_policy, name='create_work_policy'),

@@ -1,8 +1,10 @@
 from datetime import timedelta
 
 from django.contrib.auth.hashers import check_password
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.utils.timezone import now
+from excel_response import ExcelResponse
 from rest_framework import status
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from rest_framework.response import Response
@@ -13,14 +15,28 @@ from employer.serializers import *
 POST_METHOD_STR = "POST"
 GET_METHOD_STR = "GET"
 PUT_METHOD_STR = "PUT"
+DELETE_METHOD_STR = "DELETE"
+
+
+@api_view([POST_METHOD_STR, GET_METHOD_STR, PUT_METHOD_STR])
+def test(request):
+    print(
+        Permission.objects.filter(codename__in=request.data.get("permissions")))
+    return Response("ok")
+
+
+@api_view([GET_METHOD_STR])
+def get_permissions(request):
+    permissions = Permission.objects.filter(content_type__app_label="employer")
+    return Response(PermissionSerializer(permissions, many=True).data, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
 def get_user_permissions(request):
-    if request.user.is_superuser:
-        permissions = Permission.objects.all()
-    else:
-        permissions = request.user.user_permissions.all() | Permission.objects.filter(group__user=request.user)
+    # if request.user.is_superuser:
+    #     permissions = Permission.objects.all()
+    # else:
+    permissions = request.user.user_permissions.all() | Permission.objects.filter(group__user=request.user)
     return Response(PermissionSerializer(permissions, many=True).data, status=status.HTTP_200_OK)
     # list(set(chain(user.user_permissions.filter(content_type=ctype).values_list('codename', flat=True),
     #                Permission.objects.filter(group__user=user, content_type=ctype).values_list('codename', flat=True))))
@@ -112,54 +128,10 @@ def get_employer_profile(request):
 @api_view([PUT_METHOD_STR])
 def update_employer_info(request):
     e = Employer.objects.get(id=request.user.id)
-    has_changed = False
-    if "national_code" in request.data:
-        e.national_code = request.data["national_code"]
-        has_changed = True
-    if "image" in request.data:
-        e.image = request.FILES["image"]
-        has_changed = True
-    if "personality" in request.data:
-        e.personality = request.data["personality"]
-        has_changed = True
-    if "birth_date" in request.data:
-        e.birth_date = request.data["birth_date"]
-        has_changed = True
-    if "phone" in request.data:
-        e.phone = request.data["phone"]
-        has_changed = True
-    if "postal_code" in request.data:
-        e.postal_code = request.data["postal_code"]
-        has_changed = True
-    if "address" in request.data:
-        e.address = request.data["address"]
-        has_changed = True
-    if "referrer" in request.data:
-        e.referrer = request.data["referrer"]
-        has_changed = True
-    if "company_name" in request.data:
-        e.company_name = request.data["company_name"]
-        has_changed = True
-    if "legal_entity_type" in request.data:
-        e.legal_entity_type = request.data["legal_entity_type"]
-        has_changed = True
-    if "company_registration_date" in request.data:
-        e.company_registration_date = request.data["company_registration_date"]
-        has_changed = True
-    if "company_registration_number" in request.data:
-        e.company_registration_number = request.data["company_registration_number"]
-        has_changed = True
-    if "branch_name" in request.data:
-        e.branch_name = request.data["branch_name"]
-        has_changed = True
-    if "economical_code" in request.data:
-        e.economical_code = request.data["economical_code"]
-        has_changed = True
-
-    if has_changed:
-        e.save()
-    return Response({"msg": "saved" if has_changed else "no change",
-                     "info": EmployerProfileOutputSerializer(e).data}, status=status.HTTP_200_OK)
+    ser = EmployerProfileUpdateSerializer(e, data=request.data, partial=True)
+    if ser.is_valid():
+        e = ser.save()
+    return Response({"msg": "saved", "info": EmployerProfileOutputSerializer(e).data}, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
@@ -197,6 +169,38 @@ def get_workplaces_list(request):
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
+@api_view([GET_METHOD_STR])
+def get_workplaces_excel(request):
+    workplaces_list = get_list_or_404(Workplace, employer=request.user)
+    data = [["name", "province", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
+    for fin in workplaces_list:
+        data.append([fin.name, fin.province.name, fin.city.name, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
+    return ExcelResponse(data, 'workplaces')
+
+
+@api_view([GET_METHOD_STR])
+def search_workplaces(request):
+    name = request.GET.get('name')
+    city = request.GET.get('city')
+    if name and city:
+        result = Workplace.objects.filter(Q(name__icontains=name) | Q(city__name__icontains=city), employer=request.user, )
+    elif name:
+        result = Workplace.objects.filter(employer=request.user, name__icontains=name)
+    elif city:
+        result = Workplace.objects.filter(employer=request.user, city__name__icontains=city)
+    else:
+        return Response({"msg": "invalid name or city"}, status=status.HTTP_400_BAD_REQUEST)
+    ser = WorkplaceOutputSerializer(result, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view([DELETE_METHOD_STR])
+def delete_workplace(request, oid):
+    o = get_object_or_404(Workplace, employer=request.user, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+
+
 @api_view([POST_METHOD_STR])
 def create_employee(request):
     cpy_data = request.data.copy()
@@ -206,6 +210,42 @@ def create_employee(request):
         e = ser.save()
         return Response(EmployeeOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([GET_METHOD_STR])
+def get_employees_excel(request):
+    data_list = get_list_or_404(Employee, employer_id=request.user.id)
+    data = [["mobile", "first_name", "last_name", "national_code", "personnel_code", "workplace", "work_policy", "work_shift", "shift_start_date", "shift_end_date"]]
+    for fin in data_list:
+        data.append([str(fin.mobile), fin.first_name, fin.last_name, fin.national_code, fin.personnel_code,
+                     fin.workplace.name, fin.work_policy.name, fin.work_shift.name,
+                     fin.shift_start_date.strftime("%Y-%m-%d"), fin.shift_end_date.strftime("%Y-%m-%d")])
+    return ExcelResponse(data, 'employees')
+
+
+@api_view([GET_METHOD_STR])
+def search_employees(request):
+    first_name = request.GET.get('name')
+    last_name = request.GET.get('last_name')
+    personnel_code = request.GET.get('personnel_code')
+    if not first_name and not last_name and not personnel_code:
+        return Response({"msg": "invalid parameters"}, status=status.HTTP_400_BAD_REQUEST)
+    result = Employee.objects.filter(employer_id=request.user.id)
+    if first_name:
+        result = result.filter(first_name__icontains=first_name)
+    if last_name:
+        result = result.filter(last_name__icontains=last_name)
+    if personnel_code:
+        result = result.filter(personnel_code__icontains=personnel_code)
+    ser = EmployeeOutputSerializer(result, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def get_employees_list(request):
+    employees_list = get_list_or_404(Employee, employer_id=request.user.id)
+    ser = EmployeeOutputSerializer(employees_list, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
@@ -220,7 +260,7 @@ def create_holiday(request):
 
 
 @api_view([GET_METHOD_STR])
-def get_workplaces_list(request):
+def get_holidays_list(request):
     holidays_list = get_list_or_404(Holiday, employer=request.user)
     ser = HolidayOutputSerializer(holidays_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
@@ -328,6 +368,42 @@ def create_employee_request(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+def employee_requests_filter(request):
+    from_date = request.GET.get('from_date')
+    to_date = request.GET.get('to_date')
+    category = request.GET.get('category')
+    employee = request.GET.get('employee_id')
+    if not from_date and not to_date and not category and not employee:
+        return Response({"msg": "invalid parameter"}, status=status.HTTP_400_BAD_REQUEST)
+    result = EmployeeRequest.objects.filter(employer_id=request.user.id)
+    if from_date:
+        result = result.filter(start_date__gte=from_date)
+    if to_date:
+        result = result.filter(end_date__lte=to_date)
+    if category:
+        result = result.filter(category=category)
+    if employee:
+        result = result.filter(employee_id=employee)
+    return result
+
+
+@api_view([GET_METHOD_STR])
+def search_employee_requests(request):
+    result = employee_requests_filter(request)
+    ser = EmployeeOutputSerializer(result, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+@api_view([GET_METHOD_STR])
+def get_employee_requests_excel(request):
+    data_list = employee_requests_filter(request)
+    data = [["category", "employee", "start_date", "end_date", "registration_date", "action", ]]
+    for fin in data_list:
+        data.append([fin.category.name, fin.employee.get_full_name(), fin.start_date.strftime("%Y-%m-%d"), fin.end_date.strftime("%Y-%m-%d"),
+                     fin.registration_date.strftime("%Y-%m-%d"), fin.get_action_display(), ])
+    return ExcelResponse(data, 'employees')
+
+
 @api_view([GET_METHOD_STR])
 def get_employee_requests_list(request):
     ser = TicketOutputSerializer(request.user.ticket_set.all(), many=True)
@@ -343,6 +419,23 @@ def create_work_shift(request):
         e = ser.save()
         return Response(WorkShiftOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([GET_METHOD_STR])
+def search_work_shift(request):
+    name = request.GET.get('name')
+    if name is None:
+        return Response({'error': '"name" is required'}, status=status.HTTP_400_BAD_REQUEST)
+    result = WorkShift.objects.filter(employer=request.user, name__icontains=name)
+    ser = WorkShiftOutputSerializer(result, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view([DELETE_METHOD_STR])
+def delete_work_shift(request, oid):
+    o = get_object_or_404(WorkShift, employer=request.user, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
@@ -370,10 +463,24 @@ def create_work_shift_plan(request):
             item["employer"] = request.user.id
     else:
         cpy_data["employer"] = request.user.id
+
     ser = WorkShiftPlanSerializer(data=cpy_data, many=is_many)
     if ser.is_valid():
         e = ser.save()
         return Response(WorkShiftPlanOutputSerializer(e, many=is_many).data, status=status.HTTP_201_CREATED)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([PUT_METHOD_STR])
+def update_work_shift_plan(request):
+    cpy_data = request.data.copy()
+    for item in cpy_data:
+        item["employer"] = request.user.id
+    work_shift_plans = get_list_or_404(WorkShiftPlan, employer_id=request.user.id, work_shift_id=cpy_data[0]["work_shift"])
+    ser = WorkShiftPlanUpdateSerializer(data=cpy_data, instance=work_shift_plans, many=True)
+    if ser.is_valid():
+        e = ser.save()
+        return Response(WorkShiftPlanOutputSerializer(e, many=True).data, status=status.HTTP_200_OK)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -382,3 +489,30 @@ def get_work_shift_plans_list(request):
     shift = get_object_or_404(WorkShift, employer=request.user.id, id=request.data.get("work_shift_id"))
     ser = WorkShiftPlanOutputSerializer(shift.workshiftplan_set.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view([POST_METHOD_STR])
+def create_manager(request):
+    cpy_data = request.data.copy()
+    cpy_data["employer_id"] = request.user.id
+    ser = ManagerSerializer(data=cpy_data)
+    if ser.is_valid():
+        e = ser.save()
+        perms = Permission.objects.filter(codename__in=request.data.get("permissions")).values_list("id", flat=True)
+        e.user_permissions.add(*perms)
+        return Response(ManagerOutputSerializer(e).data, status=status.HTTP_201_CREATED)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([GET_METHOD_STR])
+def get_employer_dashboard(request):
+    shifts = WorkShiftPlan.objects.filter(date=now()).values_list("work_shift", flat=True)
+    employees = Employee.objects.filter(work_shift__in=shifts).distinct()
+    # todo write aggregations for these queries
+    roll_calls = RollCall.objects.filter(date=now(), arrival__lte=now(), departure__isnull=True, employee__in=employees)
+    attendees = employees.filter(id__in=roll_calls.values_list("employees", flat=True))
+    absentees = employees.exclude(attendees)
+
+    attendees_ser = AttendeesSerializer(attendees, many=True)
+    absentees_ser = AbsenteesSerializer(absentees, many=True)
+    return Response({"attendees": attendees_ser.data, "absentees": absentees_ser.data, }, status=status.HTTP_200_OK)

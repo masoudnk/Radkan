@@ -1,6 +1,8 @@
 import os
 import uuid
 
+from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, _user_has_perm, _user_has_module_perms
+from django.contrib.auth.models import Permission
 from django.core.validators import MinLengthValidator, int_list_validator
 from django.db import models
 from django.utils import timezone
@@ -16,16 +18,16 @@ class LegalEntityType(models.Model):
     name = models.CharField(max_length=250)
 
 
+def get_ticket_attachment_file_path(instance, filename, ):
+    ext = filename.split('.')[-1]
+    filename = "%s.%s" % (uuid.uuid4().hex, ext)
+    return os.path.join('TicketAttachments/' + uuid.uuid4().hex, filename)
+
+
 def get_employer_image_file_path(instance, filename, ):
     ext = filename.split('.')[-1]
     filename = "%s.%s" % (uuid.uuid4().hex, ext)
     return os.path.join('EmployerImage/' + uuid.uuid4().hex, filename)
-
-
-from django.db import models
-from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, _user_has_perm, _user_has_module_perms
-
-from django.contrib.auth.models import Permission
 
 
 class CustomUserManager(BaseUserManager):
@@ -53,20 +55,20 @@ class CustomUserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    email = models.EmailField(
-        verbose_name='email address',
-        max_length=255,
-        # unique=True,
-    )
-    username = models.CharField(max_length=255, verbose_name='نام کاربری', unique=True)
+    # email = models.EmailField(
+    #     verbose_name='email address',
+    #     max_length=255,
+    #     # unique=True,
+    # )
+    username = models.CharField(max_length=255, verbose_name='نام کاربری', )
     mobile = PhoneNumberField(
         unique=True,
         verbose_name='شماره همراه')
     is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)  # a admin user; non super-user
+    is_staff = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
-    date_joined = models.DateTimeField("date joined", default=timezone.now)
+    registration_date = jmodels.jDateTimeField(default=timezone.now)
     objects = CustomUserManager()
     # notice the absence of a "Password field", that is built in.
 
@@ -75,6 +77,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return str(self.mobile)
+
     def has_perm(self, perm, obj=None):
         if self.is_active and self.is_superuser:
             return True
@@ -93,10 +96,15 @@ class ResetPasswordRequest(models.Model):
     request_date = jmodels.jDateTimeField(auto_now_add=True)
 
 
+class Manager(User):
+    employer_id = models.PositiveIntegerField()
+
+
 class Employer(User):
+    email = models.EmailField(verbose_name='email address', max_length=255, unique=True, )
     accepted_rules = models.BooleanField(default=False)
     national_code = models.CharField(max_length=250, null=True, blank=True)
-    image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل', null=True, blank=True)
+    # image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل', null=True, blank=True)
     gender_choices = (
         (True, 'آقا'),
         (False, 'خانم'),
@@ -114,7 +122,7 @@ class Employer(User):
     referrer = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True)
     company_name = models.CharField(max_length=250, null=True, blank=True)
     legal_entity_type = models.ForeignKey(LegalEntityType, on_delete=models.PROTECT, null=True, blank=True)
-    company_registration_date = models.DateField(null=True, blank=True)
+    company_registration_date = jmodels.jDateField(null=True, blank=True)
     company_registration_number = models.PositiveIntegerField(null=True, blank=True)
     company_national_id = models.PositiveIntegerField(null=True, blank=True)
     branch_name = models.CharField(max_length=250, null=True, blank=True)
@@ -122,6 +130,8 @@ class Employer(User):
 
     def __str__(self):
         return self.username
+    # class Meta:
+    #     permissions = [("","")]
 
 
 class AttendanceDeviceBrand(models.Model):
@@ -275,7 +285,6 @@ class WorkShift(models.Model):
     year = models.PositiveSmallIntegerField()
 
 
-
 class WorkShiftPlan(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     work_shift = models.ForeignKey(WorkShift, on_delete=models.CASCADE)
@@ -285,8 +294,8 @@ class WorkShiftPlan(models.Model):
         (2, "شناور"),
     )
     plan_type = models.PositiveSmallIntegerField(choices=plan_type_choices, default=plan_type_choices[0][0])
-    daily_duty_duration = models.PositiveSmallIntegerField(help_text="minutes",null=True,blank=True)
-    floating_time = models.PositiveSmallIntegerField(help_text="minutes",null=True,blank=True)
+    daily_duty_duration = models.PositiveSmallIntegerField(help_text="minutes", null=True, blank=True)
+    floating_time = models.PositiveSmallIntegerField(help_text="minutes", null=True, blank=True)
     daily_overtime_limit = models.PositiveSmallIntegerField()
     beginning_overtime = models.PositiveSmallIntegerField(null=True, blank=True)
     middle_overtime = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -302,46 +311,29 @@ class WorkShiftPlan(models.Model):
     first_period_end = models.TimeField(null=True, blank=True)
     second_period_start = models.TimeField(null=True, blank=True)
     second_period_end = models.TimeField(null=True, blank=True)
-
-    class Meta:
-        unique_together=("work_shift", "date")
+    # fixme this uniqueness will create "AttributeError: 'list' object has no attribute 'pk'" error on serializer
+    # class Meta:
+    #     unique_together=("work_shift", "date")
 
 
 class Employee(User):
-    # gender_choices = (
-    #     (True, 'آقا'),
-    #     (False, 'خانم'),
-    # )
-    # male_gender = models.BooleanField(null=True, blank=True, default=gender_choices[0][0], choices=gender_choices, verbose_name='جنسیت')
-    # birth_date = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ تولد')
-    # image = models.ImageField(upload_to=get_file_path, max_length=255, verbose_name='عکس پروفایل')
-    # mobile = PhoneNumberField(unique=True, verbose_name='شماره همراه')
-    # email = models.EmailField(null=True, blank=True, verbose_name='ایمیل')
-    employer_id = models.PositiveIntegerField()
+    active = models.BooleanField(default=True)
+    employer_id = models.PositiveIntegerField(editable=False)
     first_name = models.CharField(max_length=255, verbose_name='نام')
     last_name = models.CharField(max_length=255, verbose_name='نام خانوادگی')
-    # user_name = models.CharField(max_length=255, verbose_name='نام کاربری')
-    # password = models.CharField(max_length=255, verbose_name='رمز عبور')
     national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی")
     personnel_code = models.CharField(max_length=250)
     workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT)
     work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT)
     work_shift = models.ForeignKey(WorkShift, on_delete=models.PROTECT)
-    shift_start_date = models.DateField()
-    shift_end_date = models.DateField()
-    use_gps = models.BooleanField(default=False)
-    use_wifi = models.BooleanField(default=False)
-    device_choices = (
-        (1, 'اپلیکیشن وب (pwa)'),
-        (2, 'اپلیکیشن اندروید'),
-        (3, 'هر دو نوع دستگاه (وب و اندروید)'),
-        (4, 'دستگاه حضور و غیاب'),
-    )
-    limit_devices = models.PositiveSmallIntegerField(choices=device_choices, default=device_choices[0][0])
-    interception = models.BooleanField(default=False)
+    shift_start_date = jmodels.jDateField()
+    shift_end_date = jmodels.jDateField()
+
+    def get_full_name(self):
+        return self.first_name + " " + self.last_name
 
     def __str__(self):
-        return self.first_name + " " + self.last_name
+        return self.get_full_name()
 
 
 class EmployeeRequestCategory(models.Model):
@@ -350,16 +342,33 @@ class EmployeeRequestCategory(models.Model):
 
 class EmployeeRequest(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT, null=True, blank=True)
+    # todo change category to CHOICE
     category = models.ForeignKey(EmployeeRequestCategory, on_delete=models.PROTECT)
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
-    start_date = models.DateField()
-    end_date = models.DateField()
-    registration_date = models.DateField(auto_now_add=True)
+    # start_date = jmodels.jDateField()
+    end_date = jmodels.jDateField(null=True,blank=True)
+    registration_date = jmodels.jDateField(auto_now_add=True)
     action_choices = (
         (1, "در دست بررسی"),
         (2, "تایید شده"),
         (3, "تایید شده"),
     )
+    action = models.PositiveSmallIntegerField(choices=action_choices, default=action_choices[0][0])
+    description = models.TextField(null=True, blank=True)
+    workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT, null=True, blank=True)
+    date = jmodels.jDateField(null=True, blank=True)
+    time = models.TimeField(null=True, blank=True)
+    traffic_choices = (
+        (1, "ورود"),
+        (2, "خروج"),
+    )
+    # from_time = models.TimeField(null=True, blank=True)
+    to_time = models.TimeField(null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی', null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی', null=True, blank=True)
+    attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
+    project = models.ForeignKey("Project", on_delete=models.PROTECT, null=True, blank=True)
+    other_employee = models.ForeignKey("Employee", on_delete=models.PROTECT, null=True, blank=True)
 
 
 class Project(models.Model):
@@ -385,12 +394,6 @@ class RadkanMessage(models.Model):
     description = models.TextField()
     work_category = models.ForeignKey(WorkCategory, on_delete=models.PROTECT)
     employee = models.ManyToManyField(Employee)
-
-
-def get_ticket_attachment_file_path(instance, filename, ):
-    ext = filename.split('.')[-1]
-    filename = "%s.%s" % (uuid.uuid4().hex, ext)
-    return os.path.join('TicketAttachments/' + uuid.uuid4().hex, filename)
 
 
 class Province(models.Model):
@@ -436,3 +439,12 @@ class Ticket(models.Model):
     description = models.TextField()
 
     attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
+
+
+class RollCall(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
+    date = jmodels.jDateField()
+    arrival = models.TimeField(auto_now_add=True)
+    departure = models.TimeField(null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی', null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی', null=True, blank=True)

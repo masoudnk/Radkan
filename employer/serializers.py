@@ -1,9 +1,7 @@
 import django.contrib.auth.password_validation as validators
 from django.contrib.auth.hashers import make_password
 from django.core import exceptions
-from django.db import IntegrityError
 from rest_framework import serializers
-from rest_framework.exceptions import ValidationError
 
 from .models import *
 
@@ -24,6 +22,27 @@ class EmployerProfileOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employer
         fields = "__all__"
+
+
+class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employer
+        fields = (
+            "national_code",
+            # "image",
+            "personality",
+            "birth_date",
+            "phone",
+            "postal_code",
+            "address",
+            "referrer",
+            "company_name",
+            "legal_entity_type",
+            "company_registration_date",
+            "company_registration_number",
+            "branch_name",
+            "economical_code",
+        )
 
 
 class CitySerializer(serializers.ModelSerializer):
@@ -268,20 +287,67 @@ class WorkShiftOutputSerializer(serializers.ModelSerializer):
         exclude = ("employer",)
 
 
-# class BulkCreateListSerializer(serializers.ListSerializer):
-#     def create(self, validated_data):
-#         result = [self.child.create(attrs) for attrs in validated_data]
-#         try:
-#             self.child.Meta.model.objects.bulk_create(result)
-#         except IntegrityError as e:
-#             raise ValidationError(e)
-#         return result
+class ManagerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Manager
+        exclude = ()
+
+
+class ManagerOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Manager
+        exclude = ("employer_id",)
+
+
+class WorkShiftPlanListSerializer(serializers.ListSerializer):
+    # def create(self, validated_data):
+    #     result = [self.child.create(attrs) for attrs in validated_data]
+    #     try:
+    #         self.child.Meta.model.objects.bulk_create(result)
+    #     except IntegrityError as e:
+    #         raise ValidationError(e)
+    #     return result
+    def create(self, validated_data):
+        books = [WorkShiftPlan(**item) for item in validated_data]
+        return WorkShiftPlan.objects.bulk_create(books)
+
+    def update(self, instance, validated_data):
+        # Maps for id->instance and id->data item.
+        plans_mapping = {plan.id: plan for plan in instance}
+        data_mapping = {item['id']: item for item in validated_data}
+
+        # Perform creations and updates.
+        ret = []
+        for plan_id, data in data_mapping.items():
+            plan = plans_mapping.get(plan_id, None)
+            # if plan is None:
+            #     ret.append(self.child.create(data))
+            # else:
+            if plan is not None:
+                ret.append(self.child.update(plan, data))
+
+        # Perform deletions.
+        # for plan_id, plan in plans_mapping.items():
+        #     if plan_id not in data_mapping:
+        #         plan.delete()
+
+        return ret
+
 
 class WorkShiftPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkShiftPlan
         exclude = ()
-        # list_serializer_class = BulkCreateListSerializer
+
+
+class WorkShiftPlanUpdateSerializer(serializers.ModelSerializer):
+    modifier = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    id = serializers.IntegerField()
+
+    class Meta:
+        model = WorkShiftPlan
+        exclude = ()
+        list_serializer_class = WorkShiftPlanListSerializer
 
 
 class WorkShiftPlanOutputSerializer(serializers.ModelSerializer):
@@ -289,3 +355,21 @@ class WorkShiftPlanOutputSerializer(serializers.ModelSerializer):
         model = WorkShiftPlan
         exclude = ("employer",)
 
+
+class AbsenteesSerializer(serializers.ModelSerializer):
+    full_name=serializers.CharField(source="get_full_name")
+
+    class Meta:
+        model = Employee
+        exclude = ("personnel_code","full_name")
+
+
+class AttendeesSerializer(serializers.ModelSerializer):
+    employee_code = serializers.CharField(source="employee.personnel_code")
+    employee_name = serializers.CharField(source="employee.get_full_name")
+    employee_workplace = serializers.CharField(source="employee.workplace")
+    time = serializers.TimeField(source="arrival", format="%H:%M")
+
+    class Meta:
+        model = RollCall
+        fields = ("employee_code", "employee_name", "employee_workplace", "time")

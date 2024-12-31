@@ -71,8 +71,8 @@ SIMPLE_JWT = {
 # default settings
 JALALI_DATE_DEFAULTS = {
     'Strftime': {
-        'date': '%y/%m/%d',
-        'datetime': '%H:%M:%S _ %y/%m/%d',
+        'date': '%y-%m-%d',
+        'datetime': '%H:%M:%S %y-%m-%d',
     },
     'Static': {
         'js': [
