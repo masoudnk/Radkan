@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest
 from employer.serializers import AttendeesSerializer, AbsenteesSerializer
-from employer.utilities import subtract_times, calculate_query_duration, calculate_daily_shift_duration
+from employer.utilities import subtract_times, calculate_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes
 from employer.views import GET_METHOD_STR, DATE_FORMAT_STR
 
 
@@ -53,7 +53,7 @@ def report_employees_function(request):
         daily_unpaid_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE)
 
         days_attended = roll_calls.distinct("date").count()
-        hours, minutes, _ = calculate_query_duration(roll_calls)
+
         # ---------------------------------------------
         plans = employee.work_shift.workshiftplan_set.all()
         for plan in plans:
@@ -75,7 +75,7 @@ def report_employees_function(request):
                         unpaid[date_str] = calculate_daily_shift_duration(plan)
 
             if plan_roll_calls.exists():
-                hours, minutes, total_minutes = calculate_query_duration(plan_roll_calls)
+                total_minutes = calculate_query_duration(plan_roll_calls)
                 attend[date_str] = total_minutes
 
                 if plan.plan_type == WorkShiftPlan.SIMPLE_PLAN_TYPE:
@@ -137,8 +137,6 @@ def report_employees_function(request):
                     absent[date_str] = this_absent
                     overtime[date_str] = this_overtime
 
-
-
                 elif plan.plan_type == WorkShiftPlan.FLOATING_PLAN_TYPE:
                     if total_minutes > plan.daily_duty_duration:
                         this_overtime = total_minutes - plan.daily_duty_duration
@@ -162,7 +160,7 @@ def report_employees_function(request):
                     return Response({"msg": "WorkShiftPlan PLAN_TYPE is not acceptable"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
         result.append({
-            "total_attend": "{}:{}".format(hours, minutes),
+            "total_attend": total_minute_to_hour_and_minutes( calculate_query_duration(roll_calls)),
             "total_absent": sum(absent.values()),
             "total_overtime": sum(overtime.values()),
             "total_burned_out": sum(burned_out.values()),
@@ -180,5 +178,26 @@ def report_employees_function(request):
             "earned": earned,
             "sick": sick,
             "unpaid": unpaid,
-            "hours": hours, "minutes": minutes, })
+            })
     return Response(result, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def report_personnel_leave(request):
+    # todo filter to month and year
+    employees = Employee.objects.filter(employer_id=request.user.id)
+    for employee in employees:
+        monthly={}
+        yearly={}
+        total_monthly=total_yearly=balance_monthly=balance_yearly=0
+
+        employee_requests = EmployeeRequest.objects.filter(
+            Q(category=EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE) |
+            Q(category=EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE) |
+            Q(category=EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE) |
+            Q(category=EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE) |
+            Q(category=EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE) |
+            Q(category=EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE),
+            employee=employee, action=EmployeeRequest.ACTION_APPROVED)
+
+
