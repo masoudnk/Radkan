@@ -107,15 +107,49 @@ class RegisterEmployerSerializer(serializers.ModelSerializer):
         fields = ("password", "email", "username", "mobile", "accepted_rules")
 
 
+class EmployeeSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    # employer_id  = serializers.HiddenField(default=serializers.CurrentUserDefault().id)
+
+    def validate(self, data):
+        password = data.get('password')
+        errors = dict()
+        try:
+            validators.validate_password(password=password, )
+        except exceptions.ValidationError as e:
+            errors['password'] = list(e.messages)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(EmployeeSerializer, self).validate(data)
+
+    def create(self, validated_data):
+        validated_data['password'] = make_password(validated_data['password'])
+        return super(EmployeeSerializer, self).create(validated_data)
+
+    class Meta:
+        model = Employee
+        fields = (
+            "employer_id",
+            "password",
+            "username",
+            "mobile",
+            "registration_date",
+            "first_name",
+            "last_name",
+            "national_code",
+            "personnel_code",
+            "shift_start_date",
+            "shift_end_date",
+            "workplace",
+            "work_policy",
+            "work_shift",
+        )
+
+
 class WorkplaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workplace
-        exclude = ()
-
-
-class EmployeeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Employee
         exclude = ()
 
 
@@ -264,9 +298,15 @@ class EmployeeRequestSerializer(serializers.ModelSerializer):
 
 
 class EmployeeRequestOutputSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display')
+    action_display = serializers.CharField(source='get_action_display')
+    manual_traffic_type_display = serializers.CharField(source='get_manual_traffic_type_display')
+
+
     class Meta:
         model = EmployeeRequest
         exclude = ("employer",)
+        read_only_fields = ('category_display',)
 
 
 class EmployeeRequestCategoryOutputSerializer(serializers.ModelSerializer):
@@ -357,11 +397,11 @@ class WorkShiftPlanOutputSerializer(serializers.ModelSerializer):
 
 
 class AbsenteesSerializer(serializers.ModelSerializer):
-    full_name=serializers.CharField(source="get_full_name")
+    full_name = serializers.CharField(source="get_full_name")
 
     class Meta:
         model = Employee
-        exclude = ("personnel_code","full_name")
+        exclude = ("personnel_code", "full_name")
 
 
 class AttendeesSerializer(serializers.ModelSerializer):
@@ -373,3 +413,147 @@ class AttendeesSerializer(serializers.ModelSerializer):
     class Meta:
         model = RollCall
         fields = ("employee_code", "employee_name", "employee_workplace", "time")
+
+
+def required(value):
+    if value is None:
+        raise serializers.ValidationError('This field is required')
+
+
+class EmployeeRequestBaseSerializer(serializers.ModelSerializer):
+    category = serializers.IntegerField(validators=[required])
+    employee_id = serializers.IntegerField(validators=[required])
+    description = serializers.CharField(validators=[required])
+    date = serializers.CharField(validators=[required])
+
+    class Meta:
+        model = EmployeeRequest
+        fields = (
+            "employer",
+            "category",
+            "employee_id",
+            "description",
+            "date",
+        )
+
+
+class EmployeeRequestBaseManualTrafficSerializer(EmployeeRequestBaseSerializer):
+    workplace_id = serializers.IntegerField(validators=[required])
+    manual_traffic_type = serializers.IntegerField(validators=[required])
+    date = serializers.CharField(validators=[required])
+
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestBaseSerializer.Meta.fields + (
+            "workplace_id",
+            "date",
+            "manual_traffic_type",
+        )
+
+
+class EmployeeRequestManualTrafficSerializer(EmployeeRequestBaseManualTrafficSerializer):
+    time = serializers.CharField(validators=[required])
+
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestBaseManualTrafficSerializer.Meta.fields + (
+            "time",
+        )
+
+
+class EmployeeRequestProjectManualTrafficSerializer(EmployeeRequestBaseManualTrafficSerializer):
+    project = serializers.IntegerField(validators=[required])
+
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestBaseManualTrafficSerializer.Meta.fields + (
+            "project",
+        )
+
+
+class EmployeeRequestHourlyEarnedLeaveSerializer(EmployeeRequestBaseSerializer):
+    time = serializers.CharField(validators=[required])
+    to_time = serializers.CharField(validators=[required])
+
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestBaseSerializer.Meta.fields + (
+
+            "to_time",
+            "date",
+            "time",
+        )
+
+
+class EmployeeRequestDailyEarnedLeaveSerializer(EmployeeRequestBaseSerializer):
+    date = serializers.CharField(validators=[required])
+    end_date = serializers.CharField(validators=[required])
+
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestBaseSerializer.Meta.fields + (
+            "end_date",
+            "date",
+        )
+
+
+class EmployeeRequestHourlyMissionSerializer(EmployeeRequestHourlyEarnedLeaveSerializer):
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestHourlyEarnedLeaveSerializer.Meta.fields + (
+            "latitude",
+            "longitude",
+        )
+
+
+class EmployeeRequestDailyMissionSerializer(EmployeeRequestDailyEarnedLeaveSerializer):
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestDailyEarnedLeaveSerializer.Meta.fields + (
+            "latitude",
+            "longitude",
+        )
+
+
+class EmployeeRequestOvertimeSerializer(EmployeeRequestHourlyEarnedLeaveSerializer):
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestHourlyEarnedLeaveSerializer.Meta.fields
+
+
+class EmployeeRequestDailySickLeaveSerializer(EmployeeRequestDailyEarnedLeaveSerializer):
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestDailyEarnedLeaveSerializer.Meta.fields + (
+            "attachment",
+        )
+
+
+class EmployeeRequestHourlySickLeaveSerializer(EmployeeRequestHourlyEarnedLeaveSerializer):
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestHourlyEarnedLeaveSerializer.Meta.fields + (
+            "attachment",
+        )
+
+
+class EmployeeRequestDailyUnpaidLeaveSerializer(EmployeeRequestDailyEarnedLeaveSerializer):
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestDailyEarnedLeaveSerializer.Meta.fields
+
+
+class EmployeeRequestHourlyUnpaidLeaveSerializer(EmployeeRequestHourlyEarnedLeaveSerializer):
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestHourlyEarnedLeaveSerializer.Meta.fields
+
+
+class EmployeeRequestShiftChangeSerializer(EmployeeRequestDailyEarnedLeaveSerializer):
+    other_employee = serializers.IntegerField(validators=[required])
+
+    class Meta:
+        model = EmployeeRequest
+        fields = EmployeeRequestDailyEarnedLeaveSerializer.Meta.fields + (
+            "other_employee",
+        )

@@ -5,7 +5,6 @@ from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, Permis
 from django.contrib.auth.models import Permission
 from django.core.validators import MinLengthValidator, int_list_validator
 from django.db import models
-from django.utils import timezone
 from django_jalali.db import models as jmodels
 from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
@@ -68,7 +67,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
-    registration_date = jmodels.jDateTimeField(default=timezone.now)
+    registration_date = jmodels.jDateTimeField(auto_now_add=True)
     objects = CustomUserManager()
     # notice the absence of a "Password field", that is built in.
 
@@ -105,16 +104,18 @@ class Employer(User):
     accepted_rules = models.BooleanField(default=False)
     national_code = models.CharField(max_length=250, null=True, blank=True)
     # image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل', null=True, blank=True)
-    gender_choices = (
-        (True, 'آقا'),
-        (False, 'خانم'),
-    )
-    male_gender = models.BooleanField(null=True, blank=True, default=gender_choices[0][0], choices=gender_choices, verbose_name='جنسیت')
-    personality_choices = (
-        (1, 'حقیقی'),
-        (2, 'حقوقی'),
-    )
-    personality = models.PositiveSmallIntegerField(default=personality_choices[0][0], choices=personality_choices, verbose_name='نوع کاربری')
+    GENDER_CHOICES = {
+        True: 'آقا',
+        False: 'خانم',
+    }
+    is_male = models.BooleanField(null=True, blank=True, default=GENDER_CHOICES[True], choices=GENDER_CHOICES, verbose_name='جنسیت')
+    PERSONALITY_PERSONAL = 1
+    PERSONALITY_LEGAL = 2
+    PERSONALITY_CHOICES = {
+        PERSONALITY_PERSONAL: 'حقیقی',
+        PERSONALITY_LEGAL: 'حقوقی',
+    }
+    personality = models.PositiveSmallIntegerField(default=PERSONALITY_CHOICES[1], choices=PERSONALITY_CHOICES, verbose_name='نوع کاربری')
     birth_date = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ تولد')
     phone = PhoneNumberField(verbose_name='تلفن', null=True, blank=True)
     postal_code = models.CharField(max_length=10, validators=[int_list_validator(sep=''), MinLengthValidator(10), ], null=True, blank=True, )
@@ -139,27 +140,22 @@ class AttendanceDeviceBrand(models.Model):
 
 
 class AttendanceDevice(models.Model):
-    status_choices = (
-        (True, 'آنلاین'),
-        (False, 'آفلاین'),
-    )
+    STATUS_CHOICES = {
+        True: 'آنلاین',
+        False: 'آفلاین',
+    }
     port = models.PositiveSmallIntegerField(default=4730)
     brand = models.ForeignKey(AttendanceDeviceBrand, on_delete=models.PROTECT)
     ip_address = models.GenericIPAddressField()
-    status = models.BooleanField(null=True, blank=True, default=status_choices[0][0], choices=status_choices, verbose_name='وضعیت دستگاه')
+    is_online = models.BooleanField(null=True, blank=True, default=STATUS_CHOICES[True], choices=STATUS_CHOICES, verbose_name='وضعیت دستگاه')
 
 
 class Workplace(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
-    # gender_choices = (
-    #     (1, 'دایره'),
-    #     (2, 'چند ضلعی'),
-    # )
     name = models.CharField(max_length=250)
     province = models.ForeignKey("Province", on_delete=models.PROTECT)
     city = models.ForeignKey("City", on_delete=models.PROTECT)
     address = models.TextField(null=True, blank=True, )
-    # shape = models.PositiveSmallIntegerField(null=True, blank=True, default=gender_choices[0][0], choices=gender_choices, verbose_name='شکل هندسی محل کار')
     radius = models.PositiveSmallIntegerField(default=50, verbose_name="شعاع(متر)")
     latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
     longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
@@ -214,15 +210,15 @@ class LeavePolicy(SecondPolicy):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     maximum_hourly_request_per_year = models.PositiveSmallIntegerField()
     maximum_hourly_request_per_month = models.PositiveSmallIntegerField()
-    acceptable_registration_type_choices = (
-        (1, 'قبل'),
-        (2, 'بعد'),
-    )
-    acceptable_daily_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, )
-    # acceptable_daily_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
+    BEFORE = 1
+    AFTER = 2
+    ACCEPTABLE_REGISTRATION_TYPE_CHOICES = {
+        BEFORE: 'قبل',
+        AFTER: 'بعد',
+    }
+    acceptable_daily_registration_type = models.PositiveSmallIntegerField(choices=ACCEPTABLE_REGISTRATION_TYPE_CHOICES, )
     acceptable_daily_registration_days = models.PositiveSmallIntegerField()
-    acceptable_hourly_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, )
-    # acceptable_hourly_registration_type = models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
+    acceptable_hourly_registration_type = models.PositiveSmallIntegerField(choices=ACCEPTABLE_REGISTRATION_TYPE_CHOICES, )
     acceptable_hourly_registration_days = models.PositiveSmallIntegerField()
 
     class Meta:
@@ -256,27 +252,6 @@ class Holiday(models.Model):
         return self.name
 
 
-#
-# class SickLeavePolicy(models.Model):
-#     work_policy = models.OneToOneField(WorkPolicy, on_delete=models.PROTECT)
-#     year = models.PositiveSmallIntegerField()
-#     maximum_sick_leave_per_year = models.PositiveSmallIntegerField(help_text="minutes")
-#     maximum_sick_leave_per_month = models.PositiveSmallIntegerField(help_text="minutes")
-#     # maximum_sick_leave_for_next_year = models.PositiveSmallIntegerField(help_text="minutes")
-#     maximum_daily_sick_leave_request_per_year = models.PositiveSmallIntegerField()
-#     maximum_hourly_sick_leave_request_per_year = models.PositiveSmallIntegerField()
-#     maximum_daily_sick_leave_request_per_month = models.PositiveSmallIntegerField()
-#     maximum_hourly_sick_leave_request_per_month = models.PositiveSmallIntegerField()
-#     acceptable_registration_type_choices = (
-#         (1, 'قبل'),
-#         (2, 'بعد'),
-#     )
-#     acceptable_daily_registration_type=models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
-#     acceptable_daily_sick_leave_registration_days = models.PositiveSmallIntegerField()
-#     acceptable_hourly_registration_type=models.PositiveSmallIntegerField(choices=acceptable_registration_type_choices, default=acceptable_registration_type_choices[0][0])
-#     acceptable_hourly_sick_leave_registration_days = models.PositiveSmallIntegerField()
-#
-
 class WorkShift(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
@@ -289,11 +264,13 @@ class WorkShiftPlan(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     work_shift = models.ForeignKey(WorkShift, on_delete=models.CASCADE)
     date = jmodels.jDateField()
-    plan_type_choices = (
-        (1, "ساده"),
-        (2, "شناور"),
-    )
-    plan_type = models.PositiveSmallIntegerField(choices=plan_type_choices, default=plan_type_choices[0][0])
+    SIMPLE_PLAN_TYPE = 1
+    FLOATING_PLAN_TYPE = 2
+    PLAN_TYPE_CHOICES = {
+        SIMPLE_PLAN_TYPE: "ساده",
+        FLOATING_PLAN_TYPE: "شناور",
+    }
+    plan_type = models.PositiveSmallIntegerField(choices=PLAN_TYPE_CHOICES, default=PLAN_TYPE_CHOICES[1])
     daily_duty_duration = models.PositiveSmallIntegerField(help_text="minutes", null=True, blank=True)
     floating_time = models.PositiveSmallIntegerField(help_text="minutes", null=True, blank=True)
     daily_overtime_limit = models.PositiveSmallIntegerField()
@@ -317,13 +294,12 @@ class WorkShiftPlan(models.Model):
 
 
 class Employee(User):
-    active = models.BooleanField(default=True)
-    employer_id = models.PositiveIntegerField(editable=False)
+    employer_id = models.PositiveIntegerField()
     first_name = models.CharField(max_length=255, verbose_name='نام')
     last_name = models.CharField(max_length=255, verbose_name='نام خانوادگی')
     national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی")
     personnel_code = models.CharField(max_length=250)
-    workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT)
+    workplace = models.ManyToManyField(Workplace)
     work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT)
     work_shift = models.ForeignKey(WorkShift, on_delete=models.PROTECT)
     shift_start_date = jmodels.jDateField()
@@ -336,39 +312,74 @@ class Employee(User):
         return self.get_full_name()
 
 
-class EmployeeRequestCategory(models.Model):
-    name = models.CharField(max_length=250)
+# class EmployeeRequestCategory(models.Model):
+#     name = models.CharField(max_length=250)
 
 
 class EmployeeRequest(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT, null=True, blank=True)
     # todo change category to CHOICE
-    category = models.ForeignKey(EmployeeRequestCategory, on_delete=models.PROTECT)
+    # category = models.ForeignKey(EmployeeRequestCategory, on_delete=models.PROTECT)
+    CATEGORY_MANUAL_TRAFFIC = 1
+    CATEGORY_HOURLY_EARNED_LEAVE = 2
+    CATEGORY_DAILY_EARNED_LEAVE = 3
+    CATEGORY_HOURLY_MISSION = 4
+    CATEGORY_DAILY_MISSION = 5
+    CATEGORY_OVERTIME = 6
+    CATEGORY_HOURLY_SICK_LEAVE = 7
+    CATEGORY_DAILY_SICK_LEAVE = 8
+    CATEGORY_HOURLY_UNPAID_LEAVE = 9
+    CATEGORY_DAILY_UNPAID_LEAVE = 10
+    CATEGORY_PROJECT_MANUAL_TRAFFIC = 11
+    CATEGORY_SHIFT_ROTATION = 12
+
+    CATEGORY_CHOICES = {
+        CATEGORY_MANUAL_TRAFFIC: "تردد دستی",
+        CATEGORY_HOURLY_EARNED_LEAVE: "مرخصی استحقاقی ساعتی",
+        CATEGORY_DAILY_EARNED_LEAVE: "مرخصی استحقاقی روزانه",
+        CATEGORY_HOURLY_MISSION: "ماموریت ساعتی",
+        CATEGORY_DAILY_MISSION: "ماموریت روزانه",
+        CATEGORY_OVERTIME: "اضافه کار",
+        CATEGORY_HOURLY_SICK_LEAVE: "استعلاجی ساعتی",
+        CATEGORY_DAILY_SICK_LEAVE: "استعلاجی روزانه",
+        CATEGORY_HOURLY_UNPAID_LEAVE: "مرخصی بی حقوق ساعتی",
+        CATEGORY_DAILY_UNPAID_LEAVE: "مرخصی بی حقوق روزانه",
+        CATEGORY_PROJECT_MANUAL_TRAFFIC: "تردد دستی پروژه",
+        CATEGORY_SHIFT_ROTATION: "جابجایی شیفت",
+    }
+    category = models.PositiveSmallIntegerField(choices=CATEGORY_CHOICES, )
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
     # start_date = jmodels.jDateField()
-    end_date = jmodels.jDateField(null=True,blank=True)
+    end_date = jmodels.jDateField(null=True, blank=True)
     registration_date = jmodels.jDateField(auto_now_add=True)
-    action_choices = (
-        (1, "در دست بررسی"),
-        (2, "تایید شده"),
-        (3, "تایید شده"),
-    )
-    action = models.PositiveSmallIntegerField(choices=action_choices, default=action_choices[0][0])
+
+    ACTION_UNDER_REVIEW = 1
+    ACTION_APPROVED = 2
+    ACTION_REJECTED = 3
+    ACTION_CHOICES = {
+        ACTION_UNDER_REVIEW: "در دست بررسی",
+        ACTION_APPROVED: "تایید شده",
+        ACTION_REJECTED: "رد شده",
+    }
+    action = models.PositiveSmallIntegerField(choices=ACTION_CHOICES, default=ACTION_CHOICES[1])
     description = models.TextField(null=True, blank=True)
     workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT, null=True, blank=True)
     date = jmodels.jDateField(null=True, blank=True)
     time = models.TimeField(null=True, blank=True)
-    traffic_choices = (
-        (1, "ورود"),
-        (2, "خروج"),
-    )
+    Login = 1
+    Logout = 2
+    TRAFFIC_CHOICES = {
+        Login: "ورود",
+        Logout: "خروج",
+    }
     # from_time = models.TimeField(null=True, blank=True)
+    manual_traffic_type = models.PositiveSmallIntegerField(choices=TRAFFIC_CHOICES, null=True, blank=True)
     to_time = models.TimeField(null=True, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی', null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی', null=True, blank=True)
     attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
     project = models.ForeignKey("Project", on_delete=models.PROTECT, null=True, blank=True)
-    other_employee = models.ForeignKey("Employee", on_delete=models.PROTECT, null=True, blank=True)
+    other_employee = models.ForeignKey("Employee", related_name="other_employee", on_delete=models.PROTECT, null=True, blank=True)
 
 
 class Project(models.Model):
@@ -429,12 +440,6 @@ class TicketSection(models.Model):
 class Ticket(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT)
     title = models.CharField(max_length=250)
-    # section_choices = (
-    #     ("SUPPORT", "پشتیبانی"),
-    #     ("SALE", "فروش"),
-    #     ("ADMINISTRATIVE", "اداری و مالی")
-    # )
-    # section = models.CharField(max_length=250)
     section = models.ForeignKey(TicketSection, on_delete=models.PROTECT)
     description = models.TextField()
 

@@ -10,18 +10,22 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from employer.populate import populate_roll_call
 from employer.serializers import *
 
 POST_METHOD_STR = "POST"
 GET_METHOD_STR = "GET"
 PUT_METHOD_STR = "PUT"
 DELETE_METHOD_STR = "DELETE"
+DATE_FORMAT_STR = "%Y-%m-%d"
+TIME_FORMAT_STR = "%H:%M"
 
 
 @api_view([POST_METHOD_STR, GET_METHOD_STR, PUT_METHOD_STR])
 def test(request):
-    print(
-        Permission.objects.filter(codename__in=request.data.get("permissions")))
+    # print(
+    #     Permission.objects.filter(codename__in=request.data.get("permissions")))
+    populate_roll_call(24)
     return Response("ok")
 
 
@@ -207,6 +211,7 @@ def create_employee(request):
     cpy_data["employer_id"] = request.user.id
     ser = EmployeeSerializer(data=cpy_data)
     if ser.is_valid():
+        print(ser.validated_data)
         e = ser.save()
         return Response(EmployeeOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -219,7 +224,7 @@ def get_employees_excel(request):
     for fin in data_list:
         data.append([str(fin.mobile), fin.first_name, fin.last_name, fin.national_code, fin.personnel_code,
                      fin.workplace.name, fin.work_policy.name, fin.work_shift.name,
-                     fin.shift_start_date.strftime("%Y-%m-%d"), fin.shift_end_date.strftime("%Y-%m-%d")])
+                     fin.shift_start_date.strftime(DATE_FORMAT_STR), fin.shift_end_date.strftime(DATE_FORMAT_STR)])
     return ExcelResponse(data, 'employees')
 
 
@@ -357,26 +362,61 @@ def get_tickets_list(request):
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([POST_METHOD_STR])
-def create_employee_request(request):
-    cpy_data = request.data.copy()
-    cpy_data["employer"] = request.user.id
-    ser = EmployeeRequestSerializer(data=cpy_data)
+def manage_and_create_employee_request(cpy_data):
+    category = int(cpy_data["category"])
+    if category == EmployeeRequest.CATEGORY_MANUAL_TRAFFIC:
+        ser = EmployeeRequestManualTrafficSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE:
+        ser = EmployeeRequestHourlyEarnedLeaveSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE:
+        ser = EmployeeRequestDailyEarnedLeaveSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_HOURLY_MISSION:
+        ser = EmployeeRequestHourlyMissionSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_DAILY_MISSION:
+        ser = EmployeeRequestDailyMissionSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_OVERTIME:
+        ser = EmployeeRequestOvertimeSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE:
+        ser =EmployeeRequestHourlySickLeaveSerializer (data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE:
+        ser =EmployeeRequestDailySickLeaveSerializer (data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE:
+        ser =EmployeeRequestHourlyUnpaidLeaveSerializer (data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE:
+        ser = EmployeeRequestDailyUnpaidLeaveSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_PROJECT_MANUAL_TRAFFIC:
+        ser = EmployeeRequestProjectManualTrafficSerializer(data=cpy_data)
+    elif category == EmployeeRequest.CATEGORY_SHIFT_ROTATION:
+        ser = EmployeeRequestShiftChangeSerializer(data=cpy_data)
+
+    else:
+        return Response({"msg": "category unaccepted"}, status=status.HTTP_400_BAD_REQUEST)
     if ser.is_valid():
         e = ser.save()
         return Response(EmployeeRequestOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view([POST_METHOD_STR])
+def create_employee_request(request):
+    cpy_data = request.data.copy()
+    cpy_data["employer"] = request.user.id
+    # ser = EmployeeRequestSerializer(data=cpy_data)
+    # if ser.is_valid():
+    #     e = ser.save()
+    #     return Response(EmployeeRequestOutputSerializer(e).data, status=status.HTTP_201_CREATED)
+    # return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+    return manage_and_create_employee_request(cpy_data)
 
-def employee_requests_filter(request):
+
+def employee_requests_filter(request, query=None):
     from_date = request.GET.get('from_date')
     to_date = request.GET.get('to_date')
     category = request.GET.get('category')
     employee = request.GET.get('employee_id')
     if not from_date and not to_date and not category and not employee:
         return Response({"msg": "invalid parameter"}, status=status.HTTP_400_BAD_REQUEST)
-    result = EmployeeRequest.objects.filter(employer_id=request.user.id)
+    result = query if query else EmployeeRequest.objects.filter(employer_id=request.user.id)
     if from_date:
         result = result.filter(start_date__gte=from_date)
     if to_date:
@@ -391,22 +431,25 @@ def employee_requests_filter(request):
 @api_view([GET_METHOD_STR])
 def search_employee_requests(request):
     result = employee_requests_filter(request)
-    ser = EmployeeOutputSerializer(result, many=True)
+    ser = EmployeeRequestOutputSerializer(result, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
+
 
 @api_view([GET_METHOD_STR])
 def get_employee_requests_excel(request):
     data_list = employee_requests_filter(request)
     data = [["category", "employee", "start_date", "end_date", "registration_date", "action", ]]
     for fin in data_list:
-        data.append([fin.category.name, fin.employee.get_full_name(), fin.start_date.strftime("%Y-%m-%d"), fin.end_date.strftime("%Y-%m-%d"),
-                     fin.registration_date.strftime("%Y-%m-%d"), fin.get_action_display(), ])
+        data.append([fin.category.name, fin.employee.get_full_name(), fin.start_date.strftime(DATE_FORMAT_STR), fin.end_date.strftime(DATE_FORMAT_STR),
+                     fin.registration_date.strftime(DATE_FORMAT_STR), fin.get_action_display(), ])
     return ExcelResponse(data, 'employees')
 
 
 @api_view([GET_METHOD_STR])
 def get_employee_requests_list(request):
-    ser = TicketOutputSerializer(request.user.ticket_set.all(), many=True)
+    employees = Employee.objects.filter(employer_id=request.user.id)
+    requests_list = EmployeeRequest.objects.filter(employee_id__in=employees)
+    ser = EmployeeRequestOutputSerializer(requests_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
@@ -445,12 +488,53 @@ def get_work_shifts_list(request):
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_work_shift_plan_type_choices(request):
+def get_choices(choices):
     data = {}
-    for row in WorkShiftPlan.plan_type_choices:
+    for row in choices:
         data[row[0]] = row[1]
-    return Response(data, status=status.HTTP_200_OK)
+    return data
+
+
+# @api_view([GET_METHOD_STR])
+# def get_work_shift_plan_type_choices(request):
+#     return Response(get_choices(WorkShiftPlan.PLAN_TYPE_CHOICES), status=status.HTTP_200_OK)
+
+@api_view([GET_METHOD_STR])
+def get_employee_request_choices(request):
+    return Response({
+        "CATEGORY_CHOICES": get_choices(EmployeeRequest.CATEGORY_CHOICES),
+        "ACTION_CHOICES": get_choices(EmployeeRequest.ACTION_CHOICES),
+        "TRAFFIC_CHOICES": get_choices(EmployeeRequest.TRAFFIC_CHOICES),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def get_employer_choices(request):
+    return Response({
+        "GENDER_CHOICES": get_choices(Employer.GENDER_CHOICES),
+        "PERSONALITY_CHOICES": get_choices(Employer.PERSONALITY_CHOICES),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def get_attendance_device_choices(request):
+    return Response({
+        "STATUS_CHOICES": get_choices(AttendanceDevice.STATUS_CHOICES),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def get_leave_policy_choices(request):
+    return Response({
+        "ACCEPTABLE_REGISTRATION_TYPE_CHOICES": get_choices(LeavePolicy.ACCEPTABLE_REGISTRATION_TYPE_CHOICES),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def get_work_shift_plan_choices(request):
+    return Response({
+        "PLAN_TYPE_CHOICES": get_choices(WorkShiftPlan.PLAN_TYPE_CHOICES),
+    }, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
@@ -503,16 +587,3 @@ def create_manager(request):
         return Response(ManagerOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-@api_view([GET_METHOD_STR])
-def get_employer_dashboard(request):
-    shifts = WorkShiftPlan.objects.filter(date=now()).values_list("work_shift", flat=True)
-    employees = Employee.objects.filter(work_shift__in=shifts).distinct()
-    # todo write aggregations for these queries
-    roll_calls = RollCall.objects.filter(date=now(), arrival__lte=now(), departure__isnull=True, employee__in=employees)
-    attendees = employees.filter(id__in=roll_calls.values_list("employees", flat=True))
-    absentees = employees.exclude(attendees)
-
-    attendees_ser = AttendeesSerializer(attendees, many=True)
-    absentees_ser = AbsenteesSerializer(absentees, many=True)
-    return Response({"attendees": attendees_ser.data, "absentees": absentees_ser.data, }, status=status.HTTP_200_OK)
