@@ -12,10 +12,6 @@ class PermissionSerializer(serializers.ModelSerializer):
         fields = ("name", "codename")
 
 
-class ProvinceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Province
-        fields = "__all__"
 
 
 class EmployerProfileOutputSerializer(serializers.ModelSerializer):
@@ -45,10 +41,6 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
         )
 
 
-class CitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = City
-        fields = "__all__"
 
 
 class TicketSectionSerializer(serializers.ModelSerializer):
@@ -146,11 +138,27 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "work_shift",
         )
 
+class WorkplaceListSerializer(serializers.ListSerializer):
+    def create(self, validated_data):
+        books = [Workplace(**item) for item in validated_data]
+        return Workplace.objects.bulk_create(books)
+
+    # def update(self, instance, validated_data):
+    #     # Maps for id->instance and id->data item.
+    #     plans_mapping = {plan.id: plan for plan in instance}
+    #     data_mapping = {item['id']: item for item in validated_data}
+    #     ret = []
+    #     for plan_id, data in data_mapping.items():
+    #         plan = plans_mapping.get(plan_id, None)
+    #         if plan is not None:
+    #             ret.append(self.child.update(plan, data))
+    #     return ret
 
 class WorkplaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workplace
         exclude = ()
+        list_serializer_class = WorkplaceListSerializer
 
 
 class HolidaySerializer(serializers.ModelSerializer):
@@ -190,8 +198,6 @@ class HolidayOutputSerializer(serializers.ModelSerializer):
 
 
 class WorkplaceOutputSerializer(serializers.ModelSerializer):
-    city = CitySerializer(read_only=True)
-    province = ProvinceSerializer(read_only=True)
 
     class Meta:
         model = Workplace
@@ -199,8 +205,12 @@ class WorkplaceOutputSerializer(serializers.ModelSerializer):
 
 
 class EmployeeOutputSerializer(serializers.ModelSerializer):
-    city = CitySerializer(read_only=True)
-    province = ProvinceSerializer(read_only=True)
+
+    class Meta:
+        model = Employee
+        exclude = ("employer_id", "password")
+
+class EmployeeDashboardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
@@ -217,6 +227,19 @@ class RadkanMessageOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = RadkanMessage
         exclude = ("employer",)
+
+
+
+class RollCallSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RollCall
+        exclude = ()
+
+
+class RollCallOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RollCall
+        exclude = ("employee",)
 
 
 class WorkPolicySerializer(serializers.ModelSerializer):

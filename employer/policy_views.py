@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
-from employer.views import POST_METHOD_STR
+from employer.views import POST_METHOD_STR, DELETE_METHOD_STR
 from .serializers import *
 
 @api_view([POST_METHOD_STR])
@@ -15,6 +15,16 @@ def create_work_policy(request):
         e=ser.save()
         return Response(WorkPolicyOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view([DELETE_METHOD_STR])
+def delete_work_policy(request, oid):
+    o = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+
+# todo create update method for WorkPolicy and change this creating style
+
+# todo create get_work_policy_by_id
 
 @api_view([POST_METHOD_STR])
 def create_earned_leave_policy(request):

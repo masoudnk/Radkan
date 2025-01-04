@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.urls import path
 
-from employer import views, policy_views, report_views,employee_views
+from employer import views, policy_views, report_views, employee_views
 
 urlpatterns = [
     path('test/', views.test, name='test'),
@@ -30,19 +30,18 @@ urlpatterns = [
     path('create_holiday/', views.create_holiday, name='create_holiday'),
     path('get_holidays_list/', views.get_holidays_list, name='get_holidays_list'),
     path('create_work_category/', views.create_work_category, name='create_work_category'),
-    path('get_provinces/', views.get_provinces, name='get_provinces'),
-    path('get_cities/', views.get_cities, name='get_cities'),
     path('create_ticket/', views.create_ticket, name='create_ticket'),
     path('get_ticket_sections_list/', views.get_ticket_sections_list, name='get_ticket_sections_list'),
     path('create_employee_request/', views.create_employee_request, name='create_employee_request'),
-    path('get_employee_requests_list/', views.get_employee_requests_list, name='get_employee_requests_list'),
+    path('get_employees_requests_list/', views.get_employees_requests_list, name='get_employees_requests_list'),
     path('employer_login/', views.employer_login, name='employer_login'),
     path('get_employer_profile/', views.get_employer_profile, name='get_employer_profile'),
     path('update_employer_info/', views.update_employer_info, name='update_employer_info'),
     path('create_work_shift/', views.create_work_shift, name='create_work_shift'),
     path('get_work_shifts_list/', views.get_work_shifts_list, name='get_work_shifts_list'),
     path('create_work_shift_plan/', views.create_work_shift_plan, name='create_work_shift_plan'),
-    path('get_work_shift_plans_list/', views.get_work_shift_plans_list, name='get_work_shift_plans_list'),
+    path('get_work_shift_plans_list/<int:oid>/', views.get_work_shift_plans_list, name='get_work_shift_plans_list'),
+    path('update_work_place/<int:oid>/', views.update_work_place, name='update_work_place'),
     path('update_work_shift_plan/', views.update_work_shift_plan, name='update_work_shift_plan'),
     path('create_manager/', views.create_manager, name='create_manager'),
     path('get_permissions/', views.get_permissions, name='get_permissions'),
@@ -58,15 +57,41 @@ urlpatterns = [
     path('get_attendance_device_choices/', views.get_attendance_device_choices, name='get_attendance_device_choices'),
     path('get_leave_policy_choices/', views.get_leave_policy_choices, name='get_leave_policy_choices'),
     path('get_work_shift_plan_choices/', views.get_work_shift_plan_choices, name='get_work_shift_plan_choices'),
+    path('import_work_places_excel/', views.import_work_places_excel, name='import_work_places_excel'),
+    path('update_employee/', views.update_employee, name='update_employee'),
+    path('update_employee_request_status/<int:oid>/', views.update_employee_request_status, name='update_employee_request_status'),
+    path('update_work_category/<int:oid>/', views.update_work_category, name='update_work_category'),
+    path('update_project/<int:oid>/', views.update_project, name='update_project'),
+    path('get_project/<int:oid>/', views.get_project, name='get_project'),
+    path('get_work_category/', views.get_work_category, name='get_work_category'),
     path('delete_workplace/<int:oid>/', views.delete_workplace, name='delete_workplace'),
+    path('delete_employee/<int:oid>/', views.delete_employee, name='delete_employee'),
     path('delete_work_shift/<int:oid>/', views.delete_work_shift, name='delete_work_shift'),
+    path('delete_holiday/<int:oid>/', views.delete_holiday, name='delete_holiday'),
+    path('delete_work_category/<int:oid>/', views.delete_work_category, name='delete_work_category'),
+    path('delete_project/<int:oid>/', views.delete_project, name='delete_project'),
+    path('get_workplace/<int:oid>/', views.get_workplace, name='get_workplace'),
+    path('get_employee/<int:oid>/', views.get_employee, name='get_employee'),
 
     # ----------------------------employee_views------------------------------------
     path('create_employee_request_for_employees/', employee_views.create_employee_request_for_employees, name='create_employee_request_for_employees'),
+    path('create_roll_call/', employee_views.create_roll_call, name='create_roll_call'),
+    path('get_employee_profile/', employee_views.get_employee_profile, name='get_employee_profile'),
+    path('get_employee_work_shift_plans_list/', employee_views.get_employee_work_shift_plans_list, name='get_employee_work_shift_plans_list'),
+
+    path('get_roll_calls_list/<int:year>/<int:month>/', employee_views.get_roll_calls_list, name='get_roll_calls_list'),
+    path('get_employee_requests_list/<int:year>/<int:month>/', employee_views.get_employee_requests_list, name='get_employee_requests_list'),
+    path('get_employee_report/<int:year>/<int:month>/', employee_views.get_employee_report, name='get_employee_report'),
 
     # -----------------------------------report_views-----------------------------
     path('report_employees_function/', report_views.report_employees_function, name='report_employees_function'),
     path('get_employer_dashboard/', report_views.get_employer_dashboard, name='get_employer_dashboard'),
+    path('get_employee_report/', report_views.get_employee_report, name='get_employee_report'),
+    path('get_employees_function_report_excel/', report_views.get_employees_function_report_excel, name='get_employees_function_report_excel'),
+    path('report_employee_traffic/', report_views.report_employee_traffic, name='report_employee_traffic'),
+    path('get_employee_traffic_report_excel/', report_views.get_employee_traffic_report_excel, name='get_employee_traffic_report_excel'),
+    path('report_employee_leave/', report_views.report_employee_leave, name='report_employee_leave'),
+    path('get_employee_leave_report_excel/', report_views.get_employee_leave_report_excel, name='get_employee_leave_report_excel'),
 
     # -------------------------------policy_views---------------------------------
     path('create_work_policy/', policy_views.create_work_policy, name='create_work_policy'),
@@ -75,5 +100,7 @@ urlpatterns = [
     path('create_overtime_policy/', policy_views.create_overtime_policy, name='create_overtime_policy'),
     path('create_manual_traffic_policy/', policy_views.create_manual_traffic_policy, name='create_manual_traffic_policy'),
     path('create_work_mission_policy/', policy_views.create_work_mission_policy, name='create_work_mission_policy'),
+
+    path('delete_work_policy/<int:oid>/', policy_views.delete_work_policy, name='delete_work_policy'),
 
 ]

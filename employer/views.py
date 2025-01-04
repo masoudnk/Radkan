@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+import openpyxl
 from django.contrib.auth.hashers import check_password
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, get_list_or_404
@@ -27,6 +28,17 @@ def test(request):
     #     Permission.objects.filter(codename__in=request.data.get("permissions")))
     populate_roll_call(24)
     return Response("ok")
+
+
+def handle_single_or_list_objects(data, user_id, serializer):
+    is_many = False
+    if isinstance(data, list):
+        is_many = True
+        for item in data:
+            item["employer"] = user_id
+    else:
+        data["employer"] = user_id
+    return serializer(data=data, many=is_many), is_many
 
 
 @api_view([GET_METHOD_STR])
@@ -166,9 +178,51 @@ def create_work_place(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view([POST_METHOD_STR])
+def import_work_places_excel(request):
+    workbook = openpyxl.load_workbook(request.FILES["excel_file"], read_only=True)
+    worksheet = workbook.active
+
+    workplaces = []
+    titles = ["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]
+    for row in worksheet.iter_rows(min_row=2):
+        dictionary = {}
+        zipped = zip(titles, row)
+        for t, c in zipped:
+            dictionary[t] = c.value
+        workplaces.append(dictionary)
+    # Unlike a normal workbook, a read-only workbook will use lazy loading. The workbook must be explicitly closed with the close() method.
+    # Close the workbook after reading
+    workbook.close()
+
+    ser, is_many = handle_single_or_list_objects(workplaces, request.user.id, WorkplaceSerializer)
+    if ser.is_valid():
+        s = ser.save()
+        return Response(WorkplaceOutputSerializer(s, many=is_many).data, status=status.HTTP_200_OK)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([POST_METHOD_STR])
+def update_work_place(request,oid):
+    wp = get_object_or_404(Workplace,employer_id=request.user.id,id=oid)
+    # using output serializer to prevent change employer
+    ser = WorkplaceOutputSerializer(data=request.data, instance=wp, partial=True)
+    if ser.is_valid():
+        w = ser.save()
+        return Response(WorkplaceOutputSerializer(instance=w).data, status=status.HTTP_201_CREATED)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view([GET_METHOD_STR])
 def get_workplaces_list(request):
-    workplaces_list = get_list_or_404(Workplace, employer=request.user)
+    workplaces_list = get_list_or_404(Workplace, employer_id=request.user.id)
+    ser = WorkplaceOutputSerializer(workplaces_list, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def get_workplace(request, oid):
+    workplaces_list = get_object_or_404(Workplace, employer_id=request.user.id, id=oid)
     ser = WorkplaceOutputSerializer(workplaces_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -176,9 +230,9 @@ def get_workplaces_list(request):
 @api_view([GET_METHOD_STR])
 def get_workplaces_excel(request):
     workplaces_list = get_list_or_404(Workplace, employer=request.user)
-    data = [["name", "province", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
+    data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
     for fin in workplaces_list:
-        data.append([fin.name, fin.province.name, fin.city.name, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
+        data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
     return ExcelResponse(data, 'workplaces')
 
 
@@ -200,7 +254,7 @@ def search_workplaces(request):
 
 @api_view([DELETE_METHOD_STR])
 def delete_workplace(request, oid):
-    o = get_object_or_404(Workplace, employer=request.user, id=oid)
+    o = get_object_or_404(Workplace, employer_id=request.user.id, id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
@@ -215,6 +269,31 @@ def create_employee(request):
         e = ser.save()
         return Response(EmployeeOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([PUT_METHOD_STR])
+def update_employee(request):
+    cpy_data = request.data.copy()
+    cpy_data["employer_id"] = request.user.id
+    employee = get_object_or_404(Employee, id=cpy_data["employee_id"], employer_id=request.user.id)
+    ser = EmployeeSerializer(data=cpy_data, instance=employee, partial=True)
+    if ser.is_valid():
+        e = ser.save()
+        return Response(EmployeeOutputSerializer(e).data, status=status.HTTP_201_CREATED)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([GET_METHOD_STR])
+def get_employee(request, oid):
+    employee = get_object_or_404(Employee, id=oid, employer_id=request.user.id)
+    return Response(EmployeeOutputSerializer(employee).data, status=status.HTTP_201_CREATED)
+
+
+@api_view([DELETE_METHOD_STR])
+def delete_employee(request, oid):
+    o = get_object_or_404(Employee, employer_id=request.user.id, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
@@ -264,6 +343,13 @@ def create_holiday(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view([DELETE_METHOD_STR])
+def delete_holiday(request, oid):
+    o = get_object_or_404(Holiday, employer_id=request.user.id, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+
+
 @api_view([GET_METHOD_STR])
 def get_holidays_list(request):
     holidays_list = get_list_or_404(Holiday, employer=request.user)
@@ -282,6 +368,30 @@ def create_work_category(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view([DELETE_METHOD_STR])
+def delete_work_category(request, oid):
+    o = get_object_or_404(WorkCategory, employer_id=request.user.id, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+
+
+@api_view([PUT_METHOD_STR])
+def update_work_category(request,oid):
+    wc = get_object_or_404(WorkCategory, employer_id=request.user.id, id=oid)
+    ser = WorkCategoryOutputSerializer(data=request.data, instance=wc, partial=True)
+    if ser.is_valid():
+        e = ser.save()
+        return Response(WorkCategoryOutputSerializer(e).data, status=status.HTTP_200_OK)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([GET_METHOD_STR])
+def get_work_category(request, oid):
+    wc = get_object_or_404(WorkCategory, employer_id=request.user.id, id=oid)
+    ser = WorkCategoryOutputSerializer(wc)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
 @api_view([GET_METHOD_STR])
 def get_work_category_list(request):
     work_categories_list = get_list_or_404(WorkCategory, employer=request.user)
@@ -298,6 +408,29 @@ def create_project(request):
         e = ser.save()
         return Response(ProjectOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view([DELETE_METHOD_STR])
+def delete_project(request, oid):
+    o = get_object_or_404(Project, employer_id=request.user.id, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+
+
+@api_view([PUT_METHOD_STR])
+def update_project(request,oid):
+    wc = get_object_or_404(Project, employer_id=request.user.id, id=oid)
+    ser = ProjectOutputSerializer(data=request.data, instance=wc, partial=True)
+    if ser.is_valid():
+        e = ser.save()
+        return Response(ProjectOutputSerializer(e).data, status=status.HTTP_200_OK)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([GET_METHOD_STR])
+def get_project(request, oid):
+    wc = get_object_or_404(Project, employer_id=request.user.id, id=oid)
+    ser = ProjectOutputSerializer(wc)
+    return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
@@ -322,20 +455,6 @@ def create_radkan_message(request):
 def get_radkan_messages_list(request):
     radkan_messages_list = get_list_or_404(RadkanMessage, employer=request.user)
     ser = ProjectOutputSerializer(radkan_messages_list, many=True)
-    return Response(ser.data, status=status.HTTP_200_OK)
-
-
-@api_view([GET_METHOD_STR])
-def get_provinces(request):
-    provinces = Province.objects.all()
-    ser = ProvinceSerializer(provinces, many=True)
-    return Response(ser.data, status=status.HTTP_200_OK)
-
-
-@api_view([GET_METHOD_STR])
-def get_cities(request):
-    cities = get_list_or_404(City, parent_id=request.GET.get('province_id'))
-    ser = CitySerializer(cities, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
@@ -377,11 +496,11 @@ def manage_and_create_employee_request(cpy_data):
     elif category == EmployeeRequest.CATEGORY_OVERTIME:
         ser = EmployeeRequestOvertimeSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE:
-        ser =EmployeeRequestHourlySickLeaveSerializer (data=cpy_data)
+        ser = EmployeeRequestHourlySickLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE:
-        ser =EmployeeRequestDailySickLeaveSerializer (data=cpy_data)
+        ser = EmployeeRequestDailySickLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE:
-        ser =EmployeeRequestHourlyUnpaidLeaveSerializer (data=cpy_data)
+        ser = EmployeeRequestHourlyUnpaidLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE:
         ser = EmployeeRequestDailyUnpaidLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_PROJECT_MANUAL_TRAFFIC:
@@ -407,6 +526,16 @@ def create_employee_request(request):
     #     return Response(EmployeeRequestOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     # return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
     return manage_and_create_employee_request(cpy_data)
+
+
+@api_view([PUT_METHOD_STR])
+def update_employee_request_status(request,oid):
+    r = get_object_or_404(EmployeeRequest, id=oid, employee__employer_id=request.user.id)
+    ser = EmployeeRequestSerializer(instance=r, data={"status": request.data.get("status")}, partial=True)
+    if ser.is_valid():
+        e = ser.save()
+        return Response(EmployeeRequestOutputSerializer(e).data, status=status.HTTP_200_OK)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 def employee_requests_filter(request, query=None):
@@ -446,7 +575,7 @@ def get_employee_requests_excel(request):
 
 
 @api_view([GET_METHOD_STR])
-def get_employee_requests_list(request):
+def get_employees_requests_list(request):
     employees = Employee.objects.filter(employer_id=request.user.id)
     requests_list = EmployeeRequest.objects.filter(employee_id__in=employees)
     ser = EmployeeRequestOutputSerializer(requests_list, many=True)
@@ -503,7 +632,7 @@ def get_choices(choices):
 def get_employee_request_choices(request):
     return Response({
         "CATEGORY_CHOICES": get_choices(EmployeeRequest.CATEGORY_CHOICES),
-        "ACTION_CHOICES": get_choices(EmployeeRequest.ACTION_CHOICES),
+        "ACTION_CHOICES": get_choices(EmployeeRequest.STATUS_CHOICES),
         "TRAFFIC_CHOICES": get_choices(EmployeeRequest.TRAFFIC_CHOICES),
     }, status=status.HTTP_200_OK)
 
@@ -539,16 +668,16 @@ def get_work_shift_plan_choices(request):
 
 @api_view([POST_METHOD_STR])
 def create_work_shift_plan(request):
-    cpy_data = request.data.copy()
-    is_many = False
-    if isinstance(request.data, list):
-        is_many = True
-        for item in cpy_data:
-            item["employer"] = request.user.id
-    else:
-        cpy_data["employer"] = request.user.id
+    # cpy_data = request.data.copy()
+    # is_many = False
+    # if isinstance(request.data, list):
+    #     is_many = True
+    #     for item in cpy_data:
+    #         item["employer"] = request.user.id
+    # else:
+    #     cpy_data["employer"] = request.user.id
 
-    ser = WorkShiftPlanSerializer(data=cpy_data, many=is_many)
+    ser, is_many = handle_single_or_list_objects(request.data, request.user.id, WorkShiftPlanSerializer)
     if ser.is_valid():
         e = ser.save()
         return Response(WorkShiftPlanOutputSerializer(e, many=is_many).data, status=status.HTTP_201_CREATED)
@@ -569,8 +698,8 @@ def update_work_shift_plan(request):
 
 
 @api_view([GET_METHOD_STR])
-def get_work_shift_plans_list(request):
-    shift = get_object_or_404(WorkShift, employer=request.user.id, id=request.data.get("work_shift_id"))
+def get_work_shift_plans_list(request,oid):
+    shift = get_object_or_404(WorkShift, employer=request.user.id, id=oid)
     ser = WorkShiftPlanOutputSerializer(shift.workshiftplan_set.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -586,4 +715,3 @@ def create_manager(request):
         e.user_permissions.add(*perms)
         return Response(ManagerOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
-

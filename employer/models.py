@@ -153,8 +153,7 @@ class AttendanceDevice(models.Model):
 class Workplace(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
-    province = models.ForeignKey("Province", on_delete=models.PROTECT)
-    city = models.ForeignKey("City", on_delete=models.PROTECT)
+    city = models.CharField(max_length=250)
     address = models.TextField(null=True, blank=True, )
     radius = models.PositiveSmallIntegerField(default=50, verbose_name="شعاع(متر)")
     latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
@@ -175,7 +174,7 @@ class WorkPolicy(models.Model):
 
 
 class BasePolicy(models.Model):
-    work_policy = models.OneToOneField(WorkPolicy, on_delete=models.PROTECT)
+    work_policy = models.OneToOneField(WorkPolicy, on_delete=models.CASCADE)
     maximum_hour_per_year = models.PositiveSmallIntegerField(help_text="minutes")
     maximum_minute_per_year = models.PositiveSmallIntegerField(help_text="minutes")
     maximum_hour_per_month = models.PositiveSmallIntegerField(help_text="minutes")
@@ -353,15 +352,15 @@ class EmployeeRequest(models.Model):
     end_date = jmodels.jDateField(null=True, blank=True)
     registration_date = jmodels.jDateField(auto_now_add=True)
 
-    ACTION_UNDER_REVIEW = 1
-    ACTION_APPROVED = 2
-    ACTION_REJECTED = 3
-    ACTION_CHOICES = {
-        ACTION_UNDER_REVIEW: "در دست بررسی",
-        ACTION_APPROVED: "تایید شده",
-        ACTION_REJECTED: "رد شده",
+    STATUS_UNDER_REVIEW = 1
+    STATUS_APPROVED = 2
+    STATUS_REJECTED = 3
+    STATUS_CHOICES = {
+        STATUS_UNDER_REVIEW: "در دست بررسی",
+        STATUS_APPROVED: "تایید شده",
+        STATUS_REJECTED: "رد شده",
     }
-    action = models.PositiveSmallIntegerField(choices=ACTION_CHOICES, default=ACTION_CHOICES[1])
+    status = models.PositiveSmallIntegerField(choices=STATUS_CHOICES, default=STATUS_CHOICES[1])
     description = models.TextField(null=True, blank=True)
     workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT, null=True, blank=True)
     date = jmodels.jDateField(null=True, blank=True)
@@ -406,32 +405,32 @@ class RadkanMessage(models.Model):
     work_category = models.ForeignKey(WorkCategory, on_delete=models.PROTECT)
     employee = models.ManyToManyField(Employee)
 
-
-class Province(models.Model):
-    name = models.CharField(max_length=255, verbose_name='استان')
-
-    class Meta:
-        verbose_name = 'استان'
-        verbose_name_plural = 'استان ها'
-
-    def __str__(self):
-        return self.name
-
-
-class City(models.Model):
-    parent = models.ForeignKey(Province, on_delete=models.CASCADE, verbose_name='استان')
-    name = models.CharField(max_length=255, verbose_name='نام')
-
-    # latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
-    # longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
-
-    class Meta:
-        verbose_name = 'شهر'
-        verbose_name_plural = 'شهر ها'
-
-    def __str__(self):
-        return self.name
-
+#
+# class Province(models.Model):
+#     name = models.CharField(max_length=255, verbose_name='استان')
+#
+#     class Meta:
+#         verbose_name = 'استان'
+#         verbose_name_plural = 'استان ها'
+#
+#     def __str__(self):
+#         return self.name
+#
+#
+# class City(models.Model):
+#     parent = models.ForeignKey(Province, on_delete=models.CASCADE, verbose_name='استان')
+#     name = models.CharField(max_length=255, verbose_name='نام')
+#
+#     # latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
+#     # longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
+#
+#     class Meta:
+#         verbose_name = 'شهر'
+#         verbose_name_plural = 'شهر ها'
+#
+#     def __str__(self):
+#         return self.name
+#
 
 class TicketSection(models.Model):
     name = models.CharField(max_length=250)
