@@ -403,7 +403,18 @@ class RadkanMessage(models.Model):
     title = models.CharField(max_length=250)
     description = models.TextField()
     work_category = models.ForeignKey(WorkCategory, on_delete=models.PROTECT)
-    employee = models.ManyToManyField(Employee)
+    employees = models.ManyToManyField(Employee)
+    date = jmodels.jDateField(auto_now_add=True)
+
+
+class RadkanMessageViewInfo(models.Model):
+    radkan_message = models.ForeignKey(RadkanMessage, on_delete=models.CASCADE)
+    date_time = jmodels.jDateTimeField(auto_now_add=True)
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = ("radkan_message", "employee")
+
 
 #
 # class Province(models.Model):
@@ -440,8 +451,17 @@ class Ticket(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT)
     title = models.CharField(max_length=250)
     section = models.ForeignKey(TicketSection, on_delete=models.PROTECT)
+    active = models.BooleanField(default=True)
+    date_time = jmodels.jDateTimeField(auto_now_add=True)
     description = models.TextField()
+    attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
 
+
+class TicketConversation(models.Model):
+    user = models.ForeignKey(User, on_delete=models.PROTECT)
+    ticket = models.ForeignKey(Ticket, on_delete=models.PROTECT)
+    date_time = jmodels.jDateTimeField(auto_now_add=True)
+    description = models.TextField()
     attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
 
 

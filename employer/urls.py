@@ -54,6 +54,7 @@ urlpatterns = [
     path('get_employee_requests_excel/', views.get_employee_requests_excel, name='get_employee_requests_excel'),
     path('get_employee_request_choices/', views.get_employee_request_choices, name='get_employee_request_choices'),
     path('get_employer_choices/', views.get_employer_choices, name='get_employer_choices'),
+    path('get_managers_list/', views.get_managers_list, name='get_managers_list'),
     path('get_attendance_device_choices/', views.get_attendance_device_choices, name='get_attendance_device_choices'),
     path('get_leave_policy_choices/', views.get_leave_policy_choices, name='get_leave_policy_choices'),
     path('get_work_shift_plan_choices/', views.get_work_shift_plan_choices, name='get_work_shift_plan_choices'),
@@ -72,12 +73,17 @@ urlpatterns = [
     path('delete_project/<int:oid>/', views.delete_project, name='delete_project'),
     path('get_workplace/<int:oid>/', views.get_workplace, name='get_workplace'),
     path('get_employee/<int:oid>/', views.get_employee, name='get_employee'),
+    path('get_radkan_messages_view_info_list/<int:oid>/', views.get_radkan_messages_view_info_list, name='get_radkan_messages_view_info_list'),
+    path('create_ticket_conversation/<int:oid>/', views.create_ticket_conversation, name='create_ticket_conversation'),
+    path('get_ticket/<int:oid>/', views.get_ticket, name='get_ticket'),
+    path('update_ticket_status/<int:oid>/', views.update_ticket_status, name='update_ticket_status'),
 
     # ----------------------------employee_views------------------------------------
     path('create_employee_request_for_employees/', employee_views.create_employee_request_for_employees, name='create_employee_request_for_employees'),
     path('create_roll_call/', employee_views.create_roll_call, name='create_roll_call'),
     path('get_employee_profile/', employee_views.get_employee_profile, name='get_employee_profile'),
     path('get_employee_work_shift_plans_list/', employee_views.get_employee_work_shift_plans_list, name='get_employee_work_shift_plans_list'),
+    path('get_message/<int:oid>/', employee_views.get_message, name='get_message'),
 
     path('get_roll_calls_list/<int:year>/<int:month>/', employee_views.get_roll_calls_list, name='get_roll_calls_list'),
     path('get_employee_requests_list/<int:year>/<int:month>/', employee_views.get_employee_requests_list, name='get_employee_requests_list'),

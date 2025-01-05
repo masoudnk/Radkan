@@ -12,8 +12,6 @@ class PermissionSerializer(serializers.ModelSerializer):
         fields = ("name", "codename")
 
 
-
-
 class EmployerProfileOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employer
@@ -41,8 +39,6 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
         )
 
 
-
-
 class TicketSectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TicketSection
@@ -55,12 +51,36 @@ class TicketSerializer(serializers.ModelSerializer):
         exclude = ()
 
 
-class TicketOutputSerializer(serializers.ModelSerializer):
+class TicketConversationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TicketConversation
+        exclude = ()
+
+
+class TicketListOutputSerializer(serializers.ModelSerializer):
     section = TicketSectionSerializer()
+    last_update = serializers.SerializerMethodField("get_last_update")
+
+    def get_last_update(self, obj):
+        if obj.ticketconversation_set.exists():
+            return obj.ticketconversation_set.last().date_time
+        return obj.date_time
 
     class Meta:
         model = Ticket
         exclude = ("user",)
+
+
+class TicketDetailOutputSerializer(serializers.ModelSerializer):
+    section = TicketSectionSerializer()
+    conversations = serializers.SerializerMethodField("get_conversations")
+
+    def get_conversations(self, obj):
+        return TicketConversationSerializer(obj.ticketconversation_set.all(), many=True).data
+
+    class Meta:
+        model = Ticket
+        exclude = ()
 
 
 class EmployerLoginSerializer(serializers.Serializer):
@@ -138,6 +158,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "work_shift",
         )
 
+
 class WorkplaceListSerializer(serializers.ListSerializer):
     def create(self, validated_data):
         books = [Workplace(**item) for item in validated_data]
@@ -153,6 +174,7 @@ class WorkplaceListSerializer(serializers.ListSerializer):
     #         if plan is not None:
     #             ret.append(self.child.update(plan, data))
     #     return ret
+
 
 class WorkplaceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -198,20 +220,18 @@ class HolidayOutputSerializer(serializers.ModelSerializer):
 
 
 class WorkplaceOutputSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Workplace
         exclude = ("employer",)
 
 
 class EmployeeOutputSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Employee
         exclude = ("employer_id", "password")
 
-class EmployeeDashboardSerializer(serializers.ModelSerializer):
 
+class EmployeeDashboardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         exclude = ("employer_id", "password")
@@ -224,10 +244,16 @@ class RadkanMessageSerializer(serializers.ModelSerializer):
 
 
 class RadkanMessageOutputSerializer(serializers.ModelSerializer):
+    seen_contacts = serializers.SerializerMethodField("get_seen_contacts")
+
+    def get_seen_contacts(self, obj):
+        views = obj.radkanmessageviewinfo_set.all().count()
+        all_employees = obj.employees.all().count()
+        return "{}({})".format(all_employees, views)
+
     class Meta:
         model = RadkanMessage
         exclude = ("employer",)
-
 
 
 class RollCallSerializer(serializers.ModelSerializer):
@@ -324,7 +350,6 @@ class EmployeeRequestOutputSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display')
     action_display = serializers.CharField(source='get_action_display')
     manual_traffic_type_display = serializers.CharField(source='get_manual_traffic_type_display')
-
 
     class Meta:
         model = EmployeeRequest

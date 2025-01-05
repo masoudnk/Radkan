@@ -20,6 +20,7 @@ PUT_METHOD_STR = "PUT"
 DELETE_METHOD_STR = "DELETE"
 DATE_FORMAT_STR = "%Y-%m-%d"
 TIME_FORMAT_STR = "%H:%M"
+DATE_TIME_FORMAT_STR = "%Y-%m-%d %H:%M"
 
 
 @api_view([POST_METHOD_STR, GET_METHOD_STR, PUT_METHOD_STR])
@@ -203,8 +204,8 @@ def import_work_places_excel(request):
 
 
 @api_view([POST_METHOD_STR])
-def update_work_place(request,oid):
-    wp = get_object_or_404(Workplace,employer_id=request.user.id,id=oid)
+def update_work_place(request, oid):
+    wp = get_object_or_404(Workplace, employer_id=request.user.id, id=oid)
     # using output serializer to prevent change employer
     ser = WorkplaceOutputSerializer(data=request.data, instance=wp, partial=True)
     if ser.is_valid():
@@ -376,7 +377,7 @@ def delete_work_category(request, oid):
 
 
 @api_view([PUT_METHOD_STR])
-def update_work_category(request,oid):
+def update_work_category(request, oid):
     wc = get_object_or_404(WorkCategory, employer_id=request.user.id, id=oid)
     ser = WorkCategoryOutputSerializer(data=request.data, instance=wc, partial=True)
     if ser.is_valid():
@@ -409,6 +410,7 @@ def create_project(request):
         return Response(ProjectOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view([DELETE_METHOD_STR])
 def delete_project(request, oid):
     o = get_object_or_404(Project, employer_id=request.user.id, id=oid)
@@ -417,7 +419,7 @@ def delete_project(request, oid):
 
 
 @api_view([PUT_METHOD_STR])
-def update_project(request,oid):
+def update_project(request, oid):
     wc = get_object_or_404(Project, employer_id=request.user.id, id=oid)
     ser = ProjectOutputSerializer(data=request.data, instance=wc, partial=True)
     if ser.is_valid():
@@ -459,6 +461,23 @@ def get_radkan_messages_list(request):
 
 
 @api_view([GET_METHOD_STR])
+def get_radkan_messages_view_info_list(request, oid):
+    msg = get_object_or_404(RadkanMessage, employer_id=request.user.id, id=oid)
+    employees = msg.employees.all()
+    views = msg.radkanmessageviewinfo_set.all()
+    result = []
+    for employee in employees:
+        row = {"personnel_code": employee.personnel_code, "full_name": employee.get_full_name(), }
+        view = views.filter(employee_id=employee.id)
+        if view.exists():
+            row["date"] = view[0].date_time.strftime(DATE_TIME_FORMAT_STR)
+        else:
+            row["date"] = None
+        result.append(row)
+    return Response(result, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
 def get_ticket_sections_list(request):
     ser = TicketSectionSerializer(TicketSection.objects.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
@@ -471,14 +490,42 @@ def create_ticket(request):
     ser = TicketSerializer(data=cpy_data)
     if ser.is_valid():
         e = ser.save()
-        return Response(TicketOutputSerializer(e).data, status=status.HTTP_201_CREATED)
+        return Response(TicketListOutputSerializer(e).data, status=status.HTTP_201_CREATED)
+    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([POST_METHOD_STR])
+def create_ticket_conversation(request, oid):
+    ticket = get_object_or_404(Ticket, user=request.user, id=oid)
+    cpy_data = request.data.copy()
+    cpy_data["user_id"] = request.user.id
+    cpy_data["ticket_id"] = ticket.id
+    ser = TicketConversationSerializer(data=cpy_data)
+    if ser.is_valid():
+        e = ser.save()
+        return Response(TicketConversationSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view([GET_METHOD_STR])
 def get_tickets_list(request):
-    ser = TicketOutputSerializer(request.user.ticket_set.all(), many=True)
+    ser = TicketListOutputSerializer(request.user.ticket_set.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view([GET_METHOD_STR])
+def get_ticket(request, oid):
+    ticket = get_object_or_404(Ticket, user=request.user, id=oid)
+    ser = TicketDetailOutputSerializer(ticket)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view([PUT_METHOD_STR])
+def update_ticket_status(request, oid):
+    ticket = get_object_or_404(Ticket, user=request.user, id=oid)
+    ticket.active = request.data['active']
+    ticket.save()
+    return Response(TicketListOutputSerializer(ticket).data, status=status.HTTP_200_OK)
 
 
 def manage_and_create_employee_request(cpy_data):
@@ -529,7 +576,7 @@ def create_employee_request(request):
 
 
 @api_view([PUT_METHOD_STR])
-def update_employee_request_status(request,oid):
+def update_employee_request_status(request, oid):
     r = get_object_or_404(EmployeeRequest, id=oid, employee__employer_id=request.user.id)
     ser = EmployeeRequestSerializer(instance=r, data={"status": request.data.get("status")}, partial=True)
     if ser.is_valid():
@@ -698,7 +745,7 @@ def update_work_shift_plan(request):
 
 
 @api_view([GET_METHOD_STR])
-def get_work_shift_plans_list(request,oid):
+def get_work_shift_plans_list(request, oid):
     shift = get_object_or_404(WorkShift, employer=request.user.id, id=oid)
     ser = WorkShiftPlanOutputSerializer(shift.workshiftplan_set.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
@@ -715,3 +762,9 @@ def create_manager(request):
         e.user_permissions.add(*perms)
         return Response(ManagerOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view([GET_METHOD_STR])
+def get_managers_list(request):
+    mg = get_list_or_404(Manager, employer_id=request.user.id)
+    return Response(ManagerOutputSerializer(mg, many=True).data, status=status.HTTP_201_CREATED)
