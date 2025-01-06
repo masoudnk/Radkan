@@ -1,4 +1,5 @@
 from datetime import timedelta
+from multiprocessing.reduction import recvfds
 
 import openpyxl
 from django.contrib.auth.hashers import check_password
@@ -10,9 +11,11 @@ from rest_framework import status
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.core.mail import send_mail
 
 from employer.populate import populate_roll_call
 from employer.serializers import *
+from melipayamak import Api
 
 POST_METHOD_STR = "POST"
 GET_METHOD_STR = "GET"
@@ -27,9 +30,19 @@ DATE_TIME_FORMAT_STR = "%Y-%m-%d %H:%M"
 def test(request):
     # print(
     #     Permission.objects.filter(codename__in=request.data.get("permissions")))
-    populate_roll_call(24)
+    # populate_roll_call(24)
+
     return Response("ok")
 
+def send_sms():
+    username = 'username'
+    password = 'password'
+    api = Api(username, password)
+    sms = api.sms()
+    to = '09123456789'
+    _from = '5000...'
+    text = 'تست وب سرویس ملی پیامک'
+    response = sms.send(to, _from, text)
 
 def handle_single_or_list_objects(data, user_id, serializer):
     is_many = False
@@ -90,6 +103,15 @@ def change_password(request):
             if len(active_request) == 1:
                 active_request[0].active = False
                 active_request[0].save()
+                employer=Employer.objects.filter(mobile=mobile)
+                if employer:
+                    if employer[0].email:
+                        send_mail(
+                            "changed password",
+                            "Here is the message.",
+                            recipient_list=[employer[0].email],
+                        )
+
                 return Response({"msg": "password changed"}, status=status.HTTP_200_OK)
 
     return Response({"msg": "multiple or unacceptable requests"}, status=status.HTTP_400_BAD_REQUEST)
@@ -664,52 +686,47 @@ def get_work_shifts_list(request):
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-def get_choices(choices):
-    data = {}
-    for row in choices:
-        data[row[0]] = row[1]
-    return data
 
 
 # @api_view([GET_METHOD_STR])
 # def get_work_shift_plan_type_choices(request):
-#     return Response(get_choices(WorkShiftPlan.PLAN_TYPE_CHOICES), status=status.HTTP_200_OK)
+#     return Response((WorkShiftPlan.PLAN_TYPE_CHOICES), status=status.HTTP_200_OK)
 
 @api_view([GET_METHOD_STR])
 def get_employee_request_choices(request):
     return Response({
-        "CATEGORY_CHOICES": get_choices(EmployeeRequest.CATEGORY_CHOICES),
-        "ACTION_CHOICES": get_choices(EmployeeRequest.STATUS_CHOICES),
-        "TRAFFIC_CHOICES": get_choices(EmployeeRequest.TRAFFIC_CHOICES),
+        "CATEGORY_CHOICES": EmployeeRequest.CATEGORY_CHOICES,
+        "ACTION_CHOICES": EmployeeRequest.STATUS_CHOICES,
+        "TRAFFIC_CHOICES": EmployeeRequest.TRAFFIC_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
 def get_employer_choices(request):
     return Response({
-        "GENDER_CHOICES": get_choices(Employer.GENDER_CHOICES),
-        "PERSONALITY_CHOICES": get_choices(Employer.PERSONALITY_CHOICES),
+        "GENDER_CHOICES": Employer.GENDER_CHOICES,
+        "PERSONALITY_CHOICES": Employer.PERSONALITY_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
 def get_attendance_device_choices(request):
     return Response({
-        "STATUS_CHOICES": get_choices(AttendanceDevice.STATUS_CHOICES),
+        "STATUS_CHOICES": AttendanceDevice.STATUS_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
 def get_leave_policy_choices(request):
     return Response({
-        "ACCEPTABLE_REGISTRATION_TYPE_CHOICES": get_choices(LeavePolicy.ACCEPTABLE_REGISTRATION_TYPE_CHOICES),
+        "ACCEPTABLE_REGISTRATION_TYPE_CHOICES": LeavePolicy.ACCEPTABLE_REGISTRATION_TYPE_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
 @api_view([GET_METHOD_STR])
 def get_work_shift_plan_choices(request):
     return Response({
-        "PLAN_TYPE_CHOICES": get_choices(WorkShiftPlan.PLAN_TYPE_CHOICES),
+        "PLAN_TYPE_CHOICES": WorkShiftPlan.PLAN_TYPE_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
@@ -764,7 +781,33 @@ def create_manager(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view([POST_METHOD_STR])
+def update_manager(request, oid):
+    mg = get_object_or_404(Manager, employer_id=request.user.id, id=oid)
+    ser = ManagerOutputSerializer(instance=mg, data=request.data, partial=True)
+    if ser.is_valid():
+        mg = ser.save()
+    else:
+        return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+    if "permissions" in request.data:
+        perms = Permission.objects.filter(codename__in=request.data.get("permissions")).values_list("id", flat=True)
+        mg.user_permissions.add(*perms)
+    return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
+
+
 @api_view([GET_METHOD_STR])
 def get_managers_list(request):
     mg = get_list_or_404(Manager, employer_id=request.user.id)
     return Response(ManagerOutputSerializer(mg, many=True).data, status=status.HTTP_201_CREATED)
+
+@api_view([GET_METHOD_STR])
+def get_manager(request,oid):
+    mg = get_object_or_404(Manager, employer_id=request.user.id,id=oid)
+    return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
+
+@api_view([DELETE_METHOD_STR])
+def delete_manager(request, oid):
+    o = get_object_or_404(Manager, employer_id=request.user.id, id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+

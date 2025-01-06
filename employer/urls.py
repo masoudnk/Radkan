@@ -77,6 +77,9 @@ urlpatterns = [
     path('create_ticket_conversation/<int:oid>/', views.create_ticket_conversation, name='create_ticket_conversation'),
     path('get_ticket/<int:oid>/', views.get_ticket, name='get_ticket'),
     path('update_ticket_status/<int:oid>/', views.update_ticket_status, name='update_ticket_status'),
+    path('update_manager/<int:oid>/', views.update_manager, name='update_manager'),
+    path('get_manager/<int:oid>/', views.get_manager, name='get_manager'),
+    path('delete_manager/<int:oid>/', views.delete_manager, name='delete_manager'),
 
     # ----------------------------employee_views------------------------------------
     path('create_employee_request_for_employees/', employee_views.create_employee_request_for_employees, name='create_employee_request_for_employees'),

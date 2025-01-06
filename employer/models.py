@@ -128,6 +128,18 @@ class Employer(User):
     company_national_id = models.PositiveIntegerField(null=True, blank=True)
     branch_name = models.CharField(max_length=250, null=True, blank=True)
     economical_code = models.PositiveIntegerField(null=True, blank=True)
+    email_login_successful = models.BooleanField(default=False)
+    email_login_failed = models.BooleanField(default=True)
+    email_change_password = models.BooleanField(default=True)
+    email_employee_login = models.BooleanField(default=False)
+    email_employee_logout = models.BooleanField(default=False)
+    sms_email_register_employee_request = models.BooleanField(default=False)
+    sms_login_successful = models.BooleanField(default=False)
+    sms_login_failed = models.BooleanField(default=False)
+    sms_change_password = models.BooleanField(default=False)
+    sms_employee_login = models.BooleanField(default=True)
+    sms_employee_logout = models.BooleanField(default=True)
+    sms_register_employee_request = models.BooleanField(default=True)
 
     def __str__(self):
         return self.username
@@ -158,10 +170,21 @@ class Workplace(models.Model):
     radius = models.PositiveSmallIntegerField(default=50, verbose_name="شعاع(متر)")
     latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
     longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
-    BSSID = models.CharField(max_length=250)
 
-    def __str__(self):
-        return self.name
+
+class RTSP(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
+    workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT)
+    rtsp_link = models.TextField()
+    # rtsp_user_name  = models.CharField(max_length=250)
+    # rtsp_password = models.CharField(max_length=250)
+    Login = 1
+    Logout = 2
+    TRAFFIC_CHOICES = {
+        Login: "ورود",
+        Logout: "خروج",
+    }
+    traffic_type = models.PositiveSmallIntegerField(choices=TRAFFIC_CHOICES)
 
 
 class WorkPolicy(models.Model):

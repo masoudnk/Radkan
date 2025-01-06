@@ -67,8 +67,18 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=200),
 }
+ADMINS = [("Masoud Najafzadeh", "masoudnk2@gmail.com"), ]
+DEFAULT_FROM_EMAIL = 'masoud@radkan.com'
 
-# default settings
+# EMAIL_HOST
+# EMAIL_HOST_PASSWORD
+# EMAIL_HOST_USER
+# EMAIL_PORT
+EMAIL_USE_LOCALTIME=True
+
+
+
+
 JALALI_DATE_DEFAULTS = {
     'Strftime': {
         'date': '%y-%m-%d',
@@ -76,14 +86,7 @@ JALALI_DATE_DEFAULTS = {
     },
     'Static': {
         'js': [
-            # loading datepicker
             'admin/js/django_jalali.min.js',
-            # OR
-            # 'admin/jquery.ui.datepicker.jalali/scripts/jquery.ui.core.js',
-            # 'admin/jquery.ui.datepicker.jalali/scripts/calendar.js',
-            # 'admin/jquery.ui.datepicker.jalali/scripts/jquery.ui.datepicker-cc.js',
-            # 'admin/jquery.ui.datepicker.jalali/scripts/jquery.ui.datepicker-cc-fa.js',
-            # 'admin/js/main.js',
         ],
         'css': {
             'all': [
