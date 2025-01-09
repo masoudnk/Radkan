@@ -381,6 +381,29 @@ class ManagerSerializer(serializers.ModelSerializer):
         exclude = ()
 
 
+class RegisterManagerSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        password = data.get('password')
+        errors = dict()
+        try:
+            validators.validate_password(password=password, )
+        except exceptions.ValidationError as e:
+            errors['password'] = list(e.messages)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(RegisterManagerSerializer, self).validate(data)
+
+    def create(self, validated_data):
+        validated_data['password'] = make_password(validated_data['password'])
+        return super(RegisterManagerSerializer, self).create(validated_data)
+
+    class Meta:
+        model = Manager
+        exclude = ()
+
+
 class ManagerOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = Manager

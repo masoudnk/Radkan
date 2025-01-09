@@ -74,10 +74,7 @@ DEFAULT_FROM_EMAIL = 'masoud@radkan.com'
 # EMAIL_HOST_PASSWORD
 # EMAIL_HOST_USER
 # EMAIL_PORT
-EMAIL_USE_LOCALTIME=True
-
-
-
+EMAIL_USE_LOCALTIME = True
 
 JALALI_DATE_DEFAULTS = {
     'Strftime': {
@@ -107,6 +104,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'employer.get_request.RequestMiddleware',
 ]
 
 ROOT_URLCONF = 'Radkan.urls'

@@ -17,16 +17,17 @@ class LegalEntityType(models.Model):
     name = models.CharField(max_length=250)
 
 
-def get_ticket_attachment_file_path(instance, filename, ):
+def get_file_path(instance, filename, ):
     ext = filename.split('.')[-1]
     filename = "%s.%s" % (uuid.uuid4().hex, ext)
-    return os.path.join('TicketAttachments/' + uuid.uuid4().hex, filename)
-
-
-def get_employer_image_file_path(instance, filename, ):
-    ext = filename.split('.')[-1]
-    filename = "%s.%s" % (uuid.uuid4().hex, ext)
-    return os.path.join('EmployerImage/' + uuid.uuid4().hex, filename)
+    subfolder = uuid.uuid4().hex
+    if isinstance(instance, Ticket):
+        main_folder = 'TicketAttachments/'
+    elif isinstance(instance, Employer):
+        main_folder = 'EmployerImage/'
+    else:
+        raise Exception("unhandled model type")
+    return os.path.join(main_folder + subfolder, filename)
 
 
 class CustomUserManager(BaseUserManager):
@@ -133,6 +134,18 @@ class Employer(User):
     email_change_password = models.BooleanField(default=True)
     email_employee_login = models.BooleanField(default=False)
     email_employee_logout = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.username
+    # class Meta:
+    #     permissions = [("","")]
+
+
+class MelliSMSInfo(models.Model):
+    employer = models.OneToOneField(Employer, on_delete=models.CASCADE)
+    melli_sms_username = models.CharField(max_length=250)
+    melli_sms_password = models.CharField(max_length=250)
+    melli_sms_phone_number = models.CharField(max_length=250)
     sms_email_register_employee_request = models.BooleanField(default=False)
     sms_login_successful = models.BooleanField(default=False)
     sms_login_failed = models.BooleanField(default=False)
@@ -140,11 +153,6 @@ class Employer(User):
     sms_employee_login = models.BooleanField(default=True)
     sms_employee_logout = models.BooleanField(default=True)
     sms_register_employee_request = models.BooleanField(default=True)
-
-    def __str__(self):
-        return self.username
-    # class Meta:
-    #     permissions = [("","")]
 
 
 class AttendanceDeviceBrand(models.Model):
@@ -326,6 +334,12 @@ class Employee(User):
     work_shift = models.ForeignKey(WorkShift, on_delete=models.PROTECT)
     shift_start_date = jmodels.jDateField()
     shift_end_date = jmodels.jDateField()
+    front_image = models.ImageField(upload_to=get_file_path, max_length=100)
+    up_image = models.ImageField(upload_to=get_file_path, max_length=100)
+    down_image = models.ImageField(upload_to=get_file_path, max_length=100)
+    left_image = models.ImageField(upload_to=get_file_path, max_length=100)
+    right_image = models.ImageField(upload_to=get_file_path, max_length=100)
+    front_second_image = models.ImageField(upload_to=get_file_path, max_length=100)
 
     def get_full_name(self):
         return self.first_name + " " + self.last_name
@@ -340,8 +354,6 @@ class Employee(User):
 
 class EmployeeRequest(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT, null=True, blank=True)
-    # todo change category to CHOICE
-    # category = models.ForeignKey(EmployeeRequestCategory, on_delete=models.PROTECT)
     CATEGORY_MANUAL_TRAFFIC = 1
     CATEGORY_HOURLY_EARNED_LEAVE = 2
     CATEGORY_DAILY_EARNED_LEAVE = 3
@@ -399,7 +411,7 @@ class EmployeeRequest(models.Model):
     to_time = models.TimeField(null=True, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی', null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی', null=True, blank=True)
-    attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
+    attachment = models.FileField(upload_to=get_file_path, max_length=200, null=True, blank=True)
     project = models.ForeignKey("Project", on_delete=models.PROTECT, null=True, blank=True)
     other_employee = models.ForeignKey("Employee", related_name="other_employee", on_delete=models.PROTECT, null=True, blank=True)
 
@@ -477,7 +489,7 @@ class Ticket(models.Model):
     active = models.BooleanField(default=True)
     date_time = jmodels.jDateTimeField(auto_now_add=True)
     description = models.TextField()
-    attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
+    attachment = models.FileField(upload_to=get_file_path, max_length=200, null=True, blank=True)
 
 
 class TicketConversation(models.Model):
@@ -485,7 +497,7 @@ class TicketConversation(models.Model):
     ticket = models.ForeignKey(Ticket, on_delete=models.PROTECT)
     date_time = jmodels.jDateTimeField(auto_now_add=True)
     description = models.TextField()
-    attachment = models.FileField(upload_to=get_ticket_attachment_file_path, max_length=200, null=True, blank=True)
+    attachment = models.FileField(upload_to=get_file_path, max_length=200, null=True, blank=True)
 
 
 class RollCall(models.Model):

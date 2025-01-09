@@ -10,10 +10,12 @@ class CustomUserCreationForm(UserCreationForm):
         model = User
         fields = ('username',)
 
+
 class CustomUserChangeForm(UserChangeForm):
     class Meta:
         model = User
         fields = ('username',)
+
 
 class CustomUserAdmin(UserAdmin):
     add_form = CustomUserCreationForm
@@ -23,21 +25,22 @@ class CustomUserAdmin(UserAdmin):
 
     list_display = ("id", 'mobile', 'is_active',
                     'is_superuser', 'last_login',)
-    list_filter = ('is_active','is_staff',  'is_superuser')
+    list_filter = ('is_active', 'is_staff', 'is_superuser')
     fieldsets = (
-        (None, {'fields': ( 'mobile', 'username', 'password')}),
-        ('Permissions', {'fields': ( 'is_active','is_staff',
-         'is_superuser', 'groups', 'user_permissions')}),
-        ('Dates', {'fields': ('last_login', )})
+        (None, {'fields': ('mobile', 'username', 'password')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff',
+                                    'is_superuser', 'groups', 'user_permissions')}),
+        ('Dates', {'fields': ('last_login',)})
     )
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username',  'password1', 'password2',  'is_active')}
+            'fields': ('username', 'password1', 'password2', 'is_active')}
          ),
     )
     # search_fields = ('email',)
     # ordering = ('email',)
+
 
 admin.site.register(User, CustomUserAdmin)
 from django.apps import apps
@@ -70,6 +73,7 @@ admin.site.register(LogEntry, LogEntryAdmin)
 
 class ListAdminMixin(ImportExportMixin):
     def __init__(self, model, admin_site):
+        date_list = []
         filter_list = []
         search_list = []
         filter_horizontal_list = []
@@ -89,7 +93,10 @@ class ListAdminMixin(ImportExportMixin):
                 display_list.append(field.name)
             if isinstance(field, CharField):
                 search_list.append(field.name)
-            elif isinstance(field, DateField) or isinstance(field, DateTimeField) or isinstance(field, BooleanField):
+            elif isinstance(field, DateField) or isinstance(field, DateTimeField):
+                date_list.append(field.name)
+                filter_list.append(field.name)
+            elif isinstance(field, BooleanField):
                 filter_list.append(field.name)
             elif isinstance(field, ForeignKey):
                 for f_field in field.remote_field.model._meta.fields:
@@ -102,6 +109,9 @@ class ListAdminMixin(ImportExportMixin):
         self.search_fields = search_list
         self.search_help_text = " , ".join(search_list)
         self.list_filter = filter_list
+        self.empty_value_display = "-"
+        if date_list:
+            self.date_hierarchy = date_list[0]
         # self.actions = [ ]
 
         super(ListAdminMixin, self).__init__(model, admin_site)

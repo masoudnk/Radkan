@@ -1,19 +1,17 @@
 from datetime import timedelta
-from multiprocessing.reduction import recvfds
 
 import openpyxl
 from django.contrib.auth.hashers import check_password
-from django.db.models import Q
+from django.core.mail import send_mail
+from django.db.models import Q, ProtectedError
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.utils.timezone import now
 from excel_response import ExcelResponse
 from rest_framework import status
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.core.mail import send_mail
 
-from employer.populate import populate_roll_call
+from employer.apps import get_this_app_name
 from employer.serializers import *
 from melipayamak import Api
 
@@ -34,6 +32,28 @@ def test(request):
 
     return Response("ok")
 
+
+def administrative_handler(view_func):
+    def wrapper(request, *args, **kwargs):
+        # code to be executed before the view
+        kwargs.update(request.data.copy())
+        try:
+            employer = Employer.objects.get(id=request.user.id)
+            kwargs["employer"] = employer.id
+        except Employer.DoesNotExist:
+            try:
+                manager = Manager.objects.get(id=request.user.id)
+                kwargs["manager"] = manager.id
+                kwargs["employer"] = manager.employer_id
+            except Manager.DoesNotExist:
+                return Response({"msg": "unauthorized request"}, status=status.HTTP_401_UNAUTHORIZED)
+        response = view_func(request, *args, **kwargs)
+        # code to be executed after the view
+        return response
+
+    return wrapper
+
+
 def send_sms():
     username = 'username'
     password = 'password'
@@ -43,6 +63,7 @@ def send_sms():
     _from = '5000...'
     text = 'تست وب سرویس ملی پیامک'
     response = sms.send(to, _from, text)
+
 
 def handle_single_or_list_objects(data, user_id, serializer):
     is_many = False
@@ -57,7 +78,7 @@ def handle_single_or_list_objects(data, user_id, serializer):
 
 @api_view([GET_METHOD_STR])
 def get_permissions(request):
-    permissions = Permission.objects.filter(content_type__app_label="employer")
+    permissions = Permission.objects.filter(content_type__app_label=get_this_app_name())
     return Response(PermissionSerializer(permissions, many=True).data, status=status.HTTP_200_OK)
 
 
@@ -92,29 +113,35 @@ def get_user_permissions(request):
 @permission_classes([])
 def change_password(request):
     mobile = request.POST.get('mobile')
-    # todo think about how council such sensitive information
-    #  user=get_object_or_404(User,(Q(email=email_or_mobile)|Q(mobile=email_or_mobile)))
-    # user=get_object_or_404(User,(Q(email=email_or_mobile)|Q(mobile=email_or_mobile)))
-    user = get_object_or_404(User, mobile=request.POST.get('mobile'))
+    password = request.data.get('password')
+    try:
+        validators.validate_password(password=password, )
+    except exceptions.ValidationError as e:
+        return Response({'password': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(mobile=mobile, is_active=True)
+    except User.DoesNotExist:
+        make_password(password)
+        return Response({"msg": "unacceptable information"}, status=status.HTTP_400_BAD_REQUEST)
     request_list = user.resetpasswordrequest_set.filter(active=True, request_date__gte=now() - timedelta(hours=1))
     if request_list.exists():
-        active_request = request_list.filter(code=request.POST.get('code'))
-        if active_request.exists():
-            if len(active_request) == 1:
-                active_request[0].active = False
-                active_request[0].save()
-                employer=Employer.objects.filter(mobile=mobile)
-                if employer:
-                    if employer[0].email:
-                        send_mail(
-                            "changed password",
-                            "Here is the message.",
-                            recipient_list=[employer[0].email],
-                        )
+        active_request = request_list.last()
+        if active_request.code == int(request.POST.get('code')):
+            employer = Employer.objects.get(id=user.id)
+            employer.set_password(password)
+            employer.save()
+            active_request.active = False
+            active_request.save()
+            if employer.email:
+                send_mail(
+                    "changed password",
+                    "Here is the message.",
+                    recipient_list=[employer.email],
+                )
 
-                return Response({"msg": "password changed"}, status=status.HTTP_200_OK)
-
-    return Response({"msg": "multiple or unacceptable requests"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"msg": "password changed"}, status=status.HTTP_200_OK)
+    return Response({"msg": "unacceptable information"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view([POST_METHOD_STR])
@@ -122,15 +149,24 @@ def change_password(request):
 @permission_classes([])
 def create_password_reset_request(request):
     mobile = request.POST.get('mobile')
-    # todo think about how council such sensitive information
-    # user=get_object_or_404(User,(Q(email=email_or_mobile)|Q(mobile=email_or_mobile)))
-    user = get_object_or_404(User, mobile=request.POST.get('mobile'))
-    ser = ResetPasswordRequestSerializer(data={"user": user.id})
-    if ser.is_valid():
-        ser.save()
-        # todo send sms to user
+    try:
+        user = get_object_or_404(User, mobile=mobile, is_active=True)
+        request_list = user.resetpasswordrequest_set.filter(active=True, request_date__gte=now() - timedelta(hours=1))
+        if request_list.exists():
+            make_password(mobile)
+            # return Response({"msg": "multiple requests is unacceptable"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+        else:
+            ser = ResetPasswordRequestSerializer(data={"user": user.id})
+            if ser.is_valid():
+                ser.save()
+                # todo send sms to user
+                #  send_sms()
         return Response({"msg": "created"}, status=status.HTTP_201_CREATED)
-    return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except User.DoesNotExist:
+        # conceal information
+        make_password(mobile)
+        return Response({"msg": "created"}, status=status.HTTP_201_CREATED)
 
 
 def get_user_or_none(mobile=None, password=None):
@@ -144,17 +180,17 @@ def get_user_or_none(mobile=None, password=None):
     return None
 
 
-@api_view([POST_METHOD_STR])
-@authentication_classes([])
-@permission_classes([])
-def employer_login(request):
-    user = get_user_or_none(request.POST.get('mobile'), request.POST.get('password'))
-    if user is not None:
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            # 'refresh': str(refresh),
-            'access': str(refresh.access_token), }, status=status.HTTP_200_OK)
-    return Response({"msg": "invalid username or password"}, status=status.HTTP_400_BAD_REQUEST)
+# @api_view([POST_METHOD_STR])
+# @authentication_classes([])
+# @permission_classes([])
+# def employer_login(request):
+#     user = get_user_or_none(request.POST.get('mobile'), request.POST.get('password'))
+#     if user is not None:
+#         refresh = RefreshToken.for_user(user)
+#         return Response({
+#             # 'refresh': str(refresh),
+#             'access': str(refresh.access_token), }, status=status.HTTP_200_OK)
+#     return Response({"msg": "invalid username or password"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view([GET_METHOD_STR])
@@ -276,9 +312,13 @@ def search_workplaces(request):
 
 
 @api_view([DELETE_METHOD_STR])
-def delete_workplace(request, oid):
-    o = get_object_or_404(Workplace, employer_id=request.user.id, id=oid)
-    o.delete()
+@administrative_handler
+def delete_workplace(request, oid, **kwargs):
+    o = get_object_or_404(Workplace, employer_id=kwargs["employer"], id=oid)
+    try:
+        o.delete()
+    except ProtectedError as e:
+        return Response({"msg": "delete workplace failed: referenced through protected foreign keys"}, status=status.HTTP_400_BAD_REQUEST)
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
 
@@ -356,10 +396,12 @@ def get_employees_list(request):
 
 
 @api_view([POST_METHOD_STR])
-def create_holiday(request):
-    cpy_data = request.data.copy()
-    cpy_data["employer"] = request.user.id
-    ser = HolidaySerializer(data=cpy_data)
+@administrative_handler
+def create_holiday(request, **kwargs):
+    print(kwargs)
+    # cpy_data = request.data.copy()
+    # cpy_data["employer"] = kwargs["employer"]
+    ser = HolidaySerializer(data=kwargs)
     if ser.is_valid():
         e = ser.save()
         return Response(HolidayOutputSerializer(e).data, status=status.HTTP_201_CREATED)
@@ -686,8 +728,6 @@ def get_work_shifts_list(request):
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-
-
 # @api_view([GET_METHOD_STR])
 # def get_work_shift_plan_type_choices(request):
 #     return Response((WorkShiftPlan.PLAN_TYPE_CHOICES), status=status.HTTP_200_OK)
@@ -775,7 +815,8 @@ def create_manager(request):
     ser = ManagerSerializer(data=cpy_data)
     if ser.is_valid():
         e = ser.save()
-        perms = Permission.objects.filter(codename__in=request.data.get("permissions")).values_list("id", flat=True)
+        # todo
+        perms = Permission.objects.filter(codename__in=request.data.get("permissions"), content_type__app_label=get_this_app_name()).values_list("id", flat=True)
         e.user_permissions.add(*perms)
         return Response(ManagerOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -800,14 +841,15 @@ def get_managers_list(request):
     mg = get_list_or_404(Manager, employer_id=request.user.id)
     return Response(ManagerOutputSerializer(mg, many=True).data, status=status.HTTP_201_CREATED)
 
+
 @api_view([GET_METHOD_STR])
-def get_manager(request,oid):
-    mg = get_object_or_404(Manager, employer_id=request.user.id,id=oid)
+def get_manager(request, oid):
+    mg = get_object_or_404(Manager, employer_id=request.user.id, id=oid)
     return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
+
 
 @api_view([DELETE_METHOD_STR])
 def delete_manager(request, oid):
     o = get_object_or_404(Manager, employer_id=request.user.id, id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
-
