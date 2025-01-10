@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import openpyxl
 from django.contrib.auth.hashers import check_password
+from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.db.models import Q, ProtectedError
 from django.shortcuts import get_object_or_404, get_list_or_404
@@ -13,45 +14,60 @@ from rest_framework.response import Response
 
 from employer.apps import get_this_app_name
 from employer.serializers import *
+from employer.utilities import national_code_validation
 from melipayamak import Api
 
 POST_METHOD_STR = "POST"
-GET_METHOD_STR = "GET"
+# GET_METHOD_STR = "GET"
 PUT_METHOD_STR = "PUT"
 DELETE_METHOD_STR = "DELETE"
 DATE_FORMAT_STR = "%Y-%m-%d"
 TIME_FORMAT_STR = "%H:%M"
 DATE_TIME_FORMAT_STR = "%Y-%m-%d %H:%M"
 
-
-@api_view([POST_METHOD_STR, GET_METHOD_STR, PUT_METHOD_STR])
-def test(request):
-    # print(
-    #     Permission.objects.filter(codename__in=request.data.get("permissions")))
-    # populate_roll_call(24)
-
-    return Response("ok")
+ADD_PERMISSION_STR = "add"
+CHANGE_PERMISSION_STR = "change"
+DELETE_PERMISSION_STR = "delete"
+VIEW_PERMISSION_STR = "view"
 
 
-def administrative_handler(view_func):
-    def wrapper(request, *args, **kwargs):
-        # code to be executed before the view
-        kwargs.update(request.data.copy())
-        try:
-            employer = Employer.objects.get(id=request.user.id)
-            kwargs["employer"] = employer.id
-        except Employer.DoesNotExist:
+@api_view([POST_METHOD_STR, PUT_METHOD_STR])
+def test(request, *args, **kwargs):
+    is_valid, msg = national_code_validation(request.data.get("national_code"))
+    return Response({"is_valid": is_valid, "msg": msg}, status=status.HTTP_200_OK)
+
+
+
+def check_user_permission(action, model):
+    def decorator(function):
+        def wrapper(request, *args, **kwargs):
+            kwargs.update(request.data.copy())
             try:
-                manager = Manager.objects.get(id=request.user.id)
-                kwargs["manager"] = manager.id
-                kwargs["employer"] = manager.employer_id
-            except Manager.DoesNotExist:
-                return Response({"msg": "unauthorized request"}, status=status.HTTP_401_UNAUTHORIZED)
-        response = view_func(request, *args, **kwargs)
-        # code to be executed after the view
-        return response
+                employer = Employer.objects.get(id=request.user.id,is_active=True)
+                kwargs["employer"] = employer.id
+            except Employer.DoesNotExist:
+                try:
+                    manager = Manager.objects.get(id=request.user.id,is_active=True,expiration_date__gte=now())
+                    kwargs["manager"] = manager.id
+                    kwargs["employer"] = manager.employer_id
+                except Manager.DoesNotExist:
+                    return Response({"msg": "unauthorized request"}, status=status.HTTP_401_UNAUTHORIZED)
+            if action is not None and model is not None:
+                model_name = model.__name__.lower()
+                perm = "{}.{}_{}".format(get_this_app_name(), action, model_name)
+                if isinstance(perm, str):
+                    perms = (perm,)
+                else:
+                    perms = perm
+                if not request.user.has_perms(perms):
+                    raise PermissionDenied
 
-    return wrapper
+            result = function(request, *args, **kwargs)
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def send_sms():
@@ -76,42 +92,23 @@ def handle_single_or_list_objects(data, user_id, serializer):
     return serializer(data=data, many=is_many), is_many
 
 
-@api_view([GET_METHOD_STR])
-def get_permissions(request):
+@api_view()
+@check_user_permission(None, None)
+def get_permissions(request, *args, **kwargs):
     permissions = Permission.objects.filter(content_type__app_label=get_this_app_name())
     return Response(PermissionSerializer(permissions, many=True).data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_user_permissions(request):
-    # if request.user.is_superuser:
-    #     permissions = Permission.objects.all()
-    # else:
+@api_view()
+@check_user_permission(None, None)
+def get_user_permissions(request, *args, **kwargs):
     permissions = request.user.user_permissions.all() | Permission.objects.filter(group__user=request.user)
     return Response(PermissionSerializer(permissions, many=True).data, status=status.HTTP_200_OK)
-    # list(set(chain(user.user_permissions.filter(content_type=ctype).values_list('codename', flat=True),
-    #                Permission.objects.filter(group__user=user, content_type=ctype).values_list('codename', flat=True))))
 
-
-# class LoginEmployer(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated]
-#
-#     def post(self, request):
-#         ser = EmployerLoginSerializer(request.POST)
-#         if ser.is_valid():
-#             vd = ser.validated_data
-#             user = EoP.authenticate(request, username=vd['email'], password=vd['password'])
-#             if user is not None:
-#                 login(request, user)
-#                 return redirect('core:home')
-#         return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
-#
-#
 @api_view([POST_METHOD_STR])
 @authentication_classes([])
 @permission_classes([])
-def change_password(request):
+def change_password(request, *args, **kwargs):
     mobile = request.POST.get('mobile')
     password = request.data.get('password')
     try:
@@ -147,7 +144,7 @@ def change_password(request):
 @api_view([POST_METHOD_STR])
 @authentication_classes([])
 @permission_classes([])
-def create_password_reset_request(request):
+def create_password_reset_request(request, *args, **kwargs):
     mobile = request.POST.get('mobile')
     try:
         user = get_object_or_404(User, mobile=mobile, is_active=True)
@@ -183,7 +180,7 @@ def get_user_or_none(mobile=None, password=None):
 # @api_view([POST_METHOD_STR])
 # @authentication_classes([])
 # @permission_classes([])
-# def employer_login(request):
+# def employer_login(request, *args, **kwargs):
 #     user = get_user_or_none(request.POST.get('mobile'), request.POST.get('password'))
 #     if user is not None:
 #         refresh = RefreshToken.for_user(user)
@@ -193,18 +190,20 @@ def get_user_or_none(mobile=None, password=None):
 #     return Response({"msg": "invalid username or password"}, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
-def get_employer_profile(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR,Employer)
+def get_employer_profile(request, *args, **kwargs):
     employer = get_object_or_404(Employer, id=request.user.id)
     ser = EmployerProfileOutputSerializer(employer)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([PUT_METHOD_STR])
-def update_employer_info(request):
+@check_user_permission(CHANGE_PERMISSION_STR,Employer)
+def update_employer_info(request, *args, **kwargs):
     e = Employer.objects.get(id=request.user.id)
     ser = EmployerProfileUpdateSerializer(e, data=request.data, partial=True)
-    if ser.is_valid():
+    if ser.is_valid(raise_exception=True):
         e = ser.save()
     return Response({"msg": "saved", "info": EmployerProfileOutputSerializer(e).data}, status=status.HTTP_200_OK)
 
@@ -212,7 +211,7 @@ def update_employer_info(request):
 @api_view([POST_METHOD_STR])
 @authentication_classes([])
 @permission_classes([])
-def create_employer(request):
+def create_employer(request, *args, **kwargs):
     # todo handle regex for mobile numbers only
     # phone_number = request.POST.get('mobile')
     # pattern = r'/((0?9)|(\+?989))\d{2}\W?\d{3}\W?\d{4}/g'
@@ -227,7 +226,8 @@ def create_employer(request):
 
 
 @api_view([POST_METHOD_STR])
-def create_work_place(request):
+@check_user_permission(ADD_PERMISSION_STR, Workplace)
+def create_work_place(request, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     ser = WorkplaceSerializer(data=cpy_data)
@@ -238,10 +238,11 @@ def create_work_place(request):
 
 
 @api_view([POST_METHOD_STR])
-def import_work_places_excel(request):
+@check_user_permission(ADD_PERMISSION_STR, Workplace)
+@check_user_permission(CHANGE_PERMISSION_STR, Workplace)
+def import_work_places_excel(request, *args, **kwargs):
     workbook = openpyxl.load_workbook(request.FILES["excel_file"], read_only=True)
     worksheet = workbook.active
-
     workplaces = []
     titles = ["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]
     for row in worksheet.iter_rows(min_row=2):
@@ -253,7 +254,6 @@ def import_work_places_excel(request):
     # Unlike a normal workbook, a read-only workbook will use lazy loading. The workbook must be explicitly closed with the close() method.
     # Close the workbook after reading
     workbook.close()
-
     ser, is_many = handle_single_or_list_objects(workplaces, request.user.id, WorkplaceSerializer)
     if ser.is_valid():
         s = ser.save()
@@ -262,6 +262,7 @@ def import_work_places_excel(request):
 
 
 @api_view([POST_METHOD_STR])
+@check_user_permission(CHANGE_PERMISSION_STR, Workplace)
 def update_work_place(request, oid):
     wp = get_object_or_404(Workplace, employer_id=request.user.id, id=oid)
     # using output serializer to prevent change employer
@@ -272,22 +273,25 @@ def update_work_place(request, oid):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
-def get_workplaces_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Workplace)
+def get_workplaces_list(request, *args, **kwargs):
     workplaces_list = get_list_or_404(Workplace, employer_id=request.user.id)
     ser = WorkplaceOutputSerializer(workplaces_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Workplace)
 def get_workplace(request, oid):
     workplaces_list = get_object_or_404(Workplace, employer_id=request.user.id, id=oid)
     ser = WorkplaceOutputSerializer(workplaces_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_workplaces_excel(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Workplace)
+def get_workplaces_excel(request, *args, **kwargs):
     workplaces_list = get_list_or_404(Workplace, employer=request.user)
     data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
     for fin in workplaces_list:
@@ -295,8 +299,9 @@ def get_workplaces_excel(request):
     return ExcelResponse(data, 'workplaces')
 
 
-@api_view([GET_METHOD_STR])
-def search_workplaces(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Workplace)
+def search_workplaces(request, *args, **kwargs):
     name = request.GET.get('name')
     city = request.GET.get('city')
     if name and city:
@@ -312,7 +317,7 @@ def search_workplaces(request):
 
 
 @api_view([DELETE_METHOD_STR])
-@administrative_handler
+@check_user_permission(DELETE_PERMISSION_STR, Workplace)
 def delete_workplace(request, oid, **kwargs):
     o = get_object_or_404(Workplace, employer_id=kwargs["employer"], id=oid)
     try:
@@ -323,7 +328,8 @@ def delete_workplace(request, oid, **kwargs):
 
 
 @api_view([POST_METHOD_STR])
-def create_employee(request):
+@check_user_permission(ADD_PERMISSION_STR, Employee)
+def create_employee(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer_id"] = request.user.id
     ser = EmployeeSerializer(data=cpy_data)
@@ -335,7 +341,8 @@ def create_employee(request):
 
 
 @api_view([PUT_METHOD_STR])
-def update_employee(request):
+@check_user_permission(CHANGE_PERMISSION_STR, Employee)
+def update_employee(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer_id"] = request.user.id
     employee = get_object_or_404(Employee, id=cpy_data["employee_id"], employer_id=request.user.id)
@@ -346,21 +353,24 @@ def update_employee(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Employee)
 def get_employee(request, oid):
     employee = get_object_or_404(Employee, id=oid, employer_id=request.user.id)
     return Response(EmployeeOutputSerializer(employee).data, status=status.HTTP_201_CREATED)
 
 
 @api_view([DELETE_METHOD_STR])
+@check_user_permission(DELETE_PERMISSION_STR, Employee)
 def delete_employee(request, oid):
     o = get_object_or_404(Employee, employer_id=request.user.id, id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_employees_excel(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Employee)
+def get_employees_excel(request, *args, **kwargs):
     data_list = get_list_or_404(Employee, employer_id=request.user.id)
     data = [["mobile", "first_name", "last_name", "national_code", "personnel_code", "workplace", "work_policy", "work_shift", "shift_start_date", "shift_end_date"]]
     for fin in data_list:
@@ -370,8 +380,9 @@ def get_employees_excel(request):
     return ExcelResponse(data, 'employees')
 
 
-@api_view([GET_METHOD_STR])
-def search_employees(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Employee)
+def search_employees(request, *args, **kwargs):
     first_name = request.GET.get('name')
     last_name = request.GET.get('last_name')
     personnel_code = request.GET.get('personnel_code')
@@ -388,17 +399,17 @@ def search_employees(request):
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_employees_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Employee)
+def get_employees_list(request, *args, **kwargs):
     employees_list = get_list_or_404(Employee, employer_id=request.user.id)
     ser = EmployeeOutputSerializer(employees_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
-@administrative_handler
+@check_user_permission(ADD_PERMISSION_STR, Holiday)
 def create_holiday(request, **kwargs):
-    print(kwargs)
     # cpy_data = request.data.copy()
     # cpy_data["employer"] = kwargs["employer"]
     ser = HolidaySerializer(data=kwargs)
@@ -409,21 +420,24 @@ def create_holiday(request, **kwargs):
 
 
 @api_view([DELETE_METHOD_STR])
+@check_user_permission(DELETE_PERMISSION_STR, Holiday)
 def delete_holiday(request, oid):
     o = get_object_or_404(Holiday, employer_id=request.user.id, id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_holidays_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Holiday)
+def get_holidays_list(request, *args, **kwargs):
     holidays_list = get_list_or_404(Holiday, employer=request.user)
     ser = HolidayOutputSerializer(holidays_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
-def create_work_category(request):
+@check_user_permission(ADD_PERMISSION_STR, WorkCategory)
+def create_work_category(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     ser = WorkCategorySerializer(data=cpy_data)
@@ -434,6 +448,7 @@ def create_work_category(request):
 
 
 @api_view([DELETE_METHOD_STR])
+@check_user_permission(DELETE_PERMISSION_STR, WorkCategory)
 def delete_work_category(request, oid):
     o = get_object_or_404(WorkCategory, employer_id=request.user.id, id=oid)
     o.delete()
@@ -441,6 +456,7 @@ def delete_work_category(request, oid):
 
 
 @api_view([PUT_METHOD_STR])
+@check_user_permission(CHANGE_PERMISSION_STR, WorkCategory)
 def update_work_category(request, oid):
     wc = get_object_or_404(WorkCategory, employer_id=request.user.id, id=oid)
     ser = WorkCategoryOutputSerializer(data=request.data, instance=wc, partial=True)
@@ -450,22 +466,25 @@ def update_work_category(request, oid):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, WorkCategory)
 def get_work_category(request, oid):
     wc = get_object_or_404(WorkCategory, employer_id=request.user.id, id=oid)
     ser = WorkCategoryOutputSerializer(wc)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_work_category_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, WorkCategory)
+def get_work_category_list(request, *args, **kwargs):
     work_categories_list = get_list_or_404(WorkCategory, employer=request.user)
     ser = HolidayOutputSerializer(work_categories_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
-def create_project(request):
+@check_user_permission(ADD_PERMISSION_STR, Project)
+def create_project(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     ser = ProjectSerializer(data=cpy_data)
@@ -476,6 +495,7 @@ def create_project(request):
 
 
 @api_view([DELETE_METHOD_STR])
+@check_user_permission(DELETE_PERMISSION_STR, Project)
 def delete_project(request, oid):
     o = get_object_or_404(Project, employer_id=request.user.id, id=oid)
     o.delete()
@@ -483,6 +503,7 @@ def delete_project(request, oid):
 
 
 @api_view([PUT_METHOD_STR])
+@check_user_permission(CHANGE_PERMISSION_STR, Project)
 def update_project(request, oid):
     wc = get_object_or_404(Project, employer_id=request.user.id, id=oid)
     ser = ProjectOutputSerializer(data=request.data, instance=wc, partial=True)
@@ -492,22 +513,25 @@ def update_project(request, oid):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Project)
 def get_project(request, oid):
     wc = get_object_or_404(Project, employer_id=request.user.id, id=oid)
     ser = ProjectOutputSerializer(wc)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_projects_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Project)
+def get_projects_list(request, *args, **kwargs):
     projects_list = get_list_or_404(Project, employer=request.user)
     ser = ProjectOutputSerializer(projects_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
-def create_radkan_message(request):
+@check_user_permission(ADD_PERMISSION_STR, RadkanMessage)
+def create_radkan_message(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     ser = RadkanMessageSerializer(data=cpy_data)
@@ -517,14 +541,16 @@ def create_radkan_message(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
-def get_radkan_messages_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, RadkanMessage)
+def get_radkan_messages_list(request, *args, **kwargs):
     radkan_messages_list = get_list_or_404(RadkanMessage, employer=request.user)
     ser = ProjectOutputSerializer(radkan_messages_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, RadkanMessage)
 def get_radkan_messages_view_info_list(request, oid):
     msg = get_object_or_404(RadkanMessage, employer_id=request.user.id, id=oid)
     employees = msg.employees.all()
@@ -541,14 +567,14 @@ def get_radkan_messages_view_info_list(request, oid):
     return Response(result, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_ticket_sections_list(request):
+@api_view()
+def get_ticket_sections_list(request, *args, **kwargs):
     ser = TicketSectionSerializer(TicketSection.objects.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
-def create_ticket(request):
+def create_ticket(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["user"] = request.user.id
     ser = TicketSerializer(data=cpy_data)
@@ -571,13 +597,13 @@ def create_ticket_conversation(request, oid):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
-def get_tickets_list(request):
+@api_view()
+def get_tickets_list(request, *args, **kwargs):
     ser = TicketListOutputSerializer(request.user.ticket_set.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def get_ticket(request, oid):
     ticket = get_object_or_404(Ticket, user=request.user, id=oid)
     ser = TicketDetailOutputSerializer(ticket)
@@ -628,7 +654,8 @@ def manage_and_create_employee_request(cpy_data):
 
 
 @api_view([POST_METHOD_STR])
-def create_employee_request(request):
+@check_user_permission(ADD_PERMISSION_STR, EmployeeRequest)
+def create_employee_request(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     # ser = EmployeeRequestSerializer(data=cpy_data)
@@ -640,6 +667,7 @@ def create_employee_request(request):
 
 
 @api_view([PUT_METHOD_STR])
+@check_user_permission(CHANGE_PERMISSION_STR, EmployeeRequest)
 def update_employee_request_status(request, oid):
     r = get_object_or_404(EmployeeRequest, id=oid, employee__employer_id=request.user.id)
     ser = EmployeeRequestSerializer(instance=r, data={"status": request.data.get("status")}, partial=True)
@@ -668,15 +696,17 @@ def employee_requests_filter(request, query=None):
     return result
 
 
-@api_view([GET_METHOD_STR])
-def search_employee_requests(request):
-    result = employee_requests_filter(request)
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, EmployeeRequest)
+def search_employee_requests(request, *args, **kwargs):
+    result = employee_requests_filter(request, *args, **kwargs)
     ser = EmployeeRequestOutputSerializer(result, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_employee_requests_excel(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, EmployeeRequest)
+def get_employee_requests_excel(request, *args, **kwargs):
     data_list = employee_requests_filter(request)
     data = [["category", "employee", "start_date", "end_date", "registration_date", "action", ]]
     for fin in data_list:
@@ -685,8 +715,9 @@ def get_employee_requests_excel(request):
     return ExcelResponse(data, 'employees')
 
 
-@api_view([GET_METHOD_STR])
-def get_employees_requests_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, EmployeeRequest)
+def get_employees_requests_list(request, *args, **kwargs):
     employees = Employee.objects.filter(employer_id=request.user.id)
     requests_list = EmployeeRequest.objects.filter(employee_id__in=employees)
     ser = EmployeeRequestOutputSerializer(requests_list, many=True)
@@ -694,7 +725,8 @@ def get_employees_requests_list(request):
 
 
 @api_view([POST_METHOD_STR])
-def create_work_shift(request):
+@check_user_permission(ADD_PERMISSION_STR, WorkShift)
+def create_work_shift(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     ser = WorkShiftSerializer(data=cpy_data)
@@ -704,8 +736,9 @@ def create_work_shift(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
-def search_work_shift(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, WorkShift)
+def search_work_shift(request, *args, **kwargs):
     name = request.GET.get('name')
     if name is None:
         return Response({'error': '"name" is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -715,25 +748,27 @@ def search_work_shift(request):
 
 
 @api_view([DELETE_METHOD_STR])
+@check_user_permission(DELETE_PERMISSION_STR, WorkShift)
 def delete_work_shift(request, oid):
     o = get_object_or_404(WorkShift, employer=request.user, id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_work_shifts_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, WorkShift)
+def get_work_shifts_list(request, *args, **kwargs):
     shifts = WorkShift.objects.filter(employer=request.user.id)
     ser = WorkShiftOutputSerializer(shifts, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
-# @api_view([GET_METHOD_STR])
-# def get_work_shift_plan_type_choices(request):
+# @api_view()
+# def get_work_shift_plan_type_choices(request, *args, **kwargs):
 #     return Response((WorkShiftPlan.PLAN_TYPE_CHOICES), status=status.HTTP_200_OK)
 
-@api_view([GET_METHOD_STR])
-def get_employee_request_choices(request):
+@api_view()
+def get_employee_request_choices(request, *args, **kwargs):
     return Response({
         "CATEGORY_CHOICES": EmployeeRequest.CATEGORY_CHOICES,
         "ACTION_CHOICES": EmployeeRequest.STATUS_CHOICES,
@@ -741,37 +776,38 @@ def get_employee_request_choices(request):
     }, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_employer_choices(request):
+@api_view()
+def get_employer_choices(request, *args, **kwargs):
     return Response({
         "GENDER_CHOICES": Employer.GENDER_CHOICES,
         "PERSONALITY_CHOICES": Employer.PERSONALITY_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_attendance_device_choices(request):
+@api_view()
+def get_attendance_device_choices(request, *args, **kwargs):
     return Response({
         "STATUS_CHOICES": AttendanceDevice.STATUS_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_leave_policy_choices(request):
+@api_view()
+def get_leave_policy_choices(request, *args, **kwargs):
     return Response({
         "ACCEPTABLE_REGISTRATION_TYPE_CHOICES": LeavePolicy.ACCEPTABLE_REGISTRATION_TYPE_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
-def get_work_shift_plan_choices(request):
+@api_view()
+def get_work_shift_plan_choices(request, *args, **kwargs):
     return Response({
         "PLAN_TYPE_CHOICES": WorkShiftPlan.PLAN_TYPE_CHOICES,
     }, status=status.HTTP_200_OK)
 
 
 @api_view([POST_METHOD_STR])
-def create_work_shift_plan(request):
+@check_user_permission(ADD_PERMISSION_STR, WorkShift)
+def create_work_shift_plan(request, *args, **kwargs):
     # cpy_data = request.data.copy()
     # is_many = False
     # if isinstance(request.data, list):
@@ -789,7 +825,8 @@ def create_work_shift_plan(request):
 
 
 @api_view([PUT_METHOD_STR])
-def update_work_shift_plan(request):
+@check_user_permission(CHANGE_PERMISSION_STR, WorkShift)
+def update_work_shift_plan(request, *args, **kwargs):
     cpy_data = request.data.copy()
     for item in cpy_data:
         item["employer"] = request.user.id
@@ -801,7 +838,8 @@ def update_work_shift_plan(request):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, WorkShift)
 def get_work_shift_plans_list(request, oid):
     shift = get_object_or_404(WorkShift, employer=request.user.id, id=oid)
     ser = WorkShiftPlanOutputSerializer(shift.workshiftplan_set.all(), many=True)
@@ -809,13 +847,14 @@ def get_work_shift_plans_list(request, oid):
 
 
 @api_view([POST_METHOD_STR])
-def create_manager(request):
+@check_user_permission(ADD_PERMISSION_STR, Manager)
+def create_manager(request, *args, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer_id"] = request.user.id
     ser = ManagerSerializer(data=cpy_data)
     if ser.is_valid():
         e = ser.save()
-        # todo
+        # todo handle permissions
         perms = Permission.objects.filter(codename__in=request.data.get("permissions"), content_type__app_label=get_this_app_name()).values_list("id", flat=True)
         e.user_permissions.add(*perms)
         return Response(ManagerOutputSerializer(e).data, status=status.HTTP_201_CREATED)
@@ -823,6 +862,7 @@ def create_manager(request):
 
 
 @api_view([POST_METHOD_STR])
+@check_user_permission(CHANGE_PERMISSION_STR, Manager)
 def update_manager(request, oid):
     mg = get_object_or_404(Manager, employer_id=request.user.id, id=oid)
     ser = ManagerOutputSerializer(instance=mg, data=request.data, partial=True)
@@ -836,19 +876,22 @@ def update_manager(request, oid):
     return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
 
 
-@api_view([GET_METHOD_STR])
-def get_managers_list(request):
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Manager)
+def get_managers_list(request, *args, **kwargs):
     mg = get_list_or_404(Manager, employer_id=request.user.id)
     return Response(ManagerOutputSerializer(mg, many=True).data, status=status.HTTP_201_CREATED)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, Manager)
 def get_manager(request, oid):
     mg = get_object_or_404(Manager, employer_id=request.user.id, id=oid)
     return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
 
 
 @api_view([DELETE_METHOD_STR])
+@check_user_permission(DELETE_PERMISSION_STR, Manager)
 def delete_manager(request, oid):
     o = get_object_or_404(Manager, employer_id=request.user.id, id=oid)
     o.delete()

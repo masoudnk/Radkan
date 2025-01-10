@@ -4,39 +4,13 @@ from django.core import exceptions
 from rest_framework import serializers
 
 from .models import *
+from .utilities import national_code_validation
 
 
 class PermissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Permission
         fields = ("name", "codename")
-
-
-class EmployerProfileOutputSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Employer
-        fields = "__all__"
-
-
-class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Employer
-        fields = (
-            "national_code",
-            # "image",
-            "personality",
-            "birth_date",
-            "phone",
-            "postal_code",
-            "address",
-            "referrer",
-            "company_name",
-            "legal_entity_type",
-            "company_registration_date",
-            "company_registration_number",
-            "branch_name",
-            "economical_code",
-        )
 
 
 class TicketSectionSerializer(serializers.ModelSerializer):
@@ -157,6 +131,44 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "work_policy",
             "work_shift",
         )
+
+
+class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
+
+    def validate(self, data):
+        errors = dict()
+        try:
+            national_code_validation(data.get('national_code'))
+        except exceptions.ValidationError as e:
+            errors["national_code"] = list(e.messages)
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(EmployerProfileUpdateSerializer, self).validate(data)
+
+    class Meta:
+        model = Employer
+        fields = (
+            "national_code",
+            # "image",
+            "personality",
+            "birth_date",
+            "phone",
+            "postal_code",
+            "address",
+            "referrer",
+            "company_name",
+            "legal_entity_type",
+            "company_registration_date",
+            "company_registration_number",
+            "branch_name",
+            "economical_code",
+        )
+
+
+class EmployerProfileOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employer
+        fields = EmployerProfileUpdateSerializer.Meta.fields
 
 
 class WorkplaceListSerializer(serializers.ListSerializer):

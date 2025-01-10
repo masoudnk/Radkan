@@ -1,5 +1,6 @@
 import random
 
+from django.core.exceptions import ValidationError
 from django.db.models import ExpressionWrapper, Sum, DurationField, F
 
 
@@ -45,3 +46,38 @@ def calculate_query_duration(q):
         minutes = total_minutes = hours = 0
 
     return hours, minutes, total_minutes
+
+
+def national_code_validation(national_code: str):
+    if national_code is None:
+        return
+    msg = ""
+    if not national_code.isdecimal():
+        msg = "national-code must be a decimal number"
+        raise ValidationError( msg)
+    length = len(national_code)
+    if length != 10:
+        if 8 > length or length > 10:
+            msg = "national-code must be 10 digits"
+            raise ValidationError( msg)
+        code = ((10 - length) * "0") + national_code
+    else:
+        code = national_code
+    total = 0
+    for i, c in enumerate(code[:-1]):
+        total += int(c) * (10 - i)
+    if total == 0:
+        msg = "national-code is unacceptable"
+        raise ValidationError( msg)
+    controller = total % 11
+    if controller < 2:
+        if controller == int(national_code[-1]):
+            return
+        else:
+            msg = "invalid controller"
+            raise ValidationError( msg)
+    elif controller == (11 - int(national_code[-1])):
+        return
+    else:
+        msg = "national-code is unacceptable"
+        raise ValidationError( msg)

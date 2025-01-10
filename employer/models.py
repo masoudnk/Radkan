@@ -3,14 +3,14 @@ import uuid
 
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, _user_has_perm, _user_has_module_perms
 from django.contrib.auth.models import Permission
-from django.core.validators import MinLengthValidator, int_list_validator
+from django.core.validators import MinLengthValidator, int_list_validator, MaxValueValidator
 from django.db import models
 from django_jalali.db import models as jmodels
 from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
 from phonenumber_field.modelfields import PhoneNumberField
 
-from employer.utilities import get_random_int_code
+from employer.utilities import get_random_int_code, national_code_validation
 
 
 class LegalEntityType(models.Model):
@@ -98,12 +98,13 @@ class ResetPasswordRequest(models.Model):
 
 class Manager(User):
     employer_id = models.PositiveIntegerField()
+    expiration_date = jmodels.jDateTimeField()
 
 
 class Employer(User):
     email = models.EmailField(verbose_name='email address', max_length=255, unique=True, )
     accepted_rules = models.BooleanField(default=False)
-    national_code = models.CharField(max_length=250, null=True, blank=True)
+    national_code = models.CharField(max_length=250, null=True, blank=True,validators=[national_code_validation])
     # image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل', null=True, blank=True)
     GENDER_CHOICES = {
         True: 'آقا',
@@ -207,9 +208,9 @@ class WorkPolicy(models.Model):
 class BasePolicy(models.Model):
     work_policy = models.OneToOneField(WorkPolicy, on_delete=models.CASCADE)
     maximum_hour_per_year = models.PositiveSmallIntegerField(help_text="minutes")
-    maximum_minute_per_year = models.PositiveSmallIntegerField(help_text="minutes")
+    maximum_minute_per_year = models.PositiveSmallIntegerField(help_text="minutes",validators=[MaxValueValidator(59)])
     maximum_hour_per_month = models.PositiveSmallIntegerField(help_text="minutes")
-    maximum_minute_per_month = models.PositiveSmallIntegerField(help_text="minutes")
+    maximum_minute_per_month = models.PositiveSmallIntegerField(help_text="minutes",validators=[MaxValueValidator(59)])
 
     class Meta:
         abstract = True
@@ -259,7 +260,7 @@ class EarnedLeavePolicy(LeavePolicy):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     year = models.PositiveSmallIntegerField()
     maximum_earned_leave_for_next_year_hour = models.PositiveSmallIntegerField(help_text="hour")
-    maximum_earned_leave_for_next_year_minutes = models.PositiveSmallIntegerField(help_text="minutes")
+    maximum_earned_leave_for_next_year_minutes = models.PositiveSmallIntegerField(help_text="minutes",validators=[MaxValueValidator(59)])
 
     class Meta:
         permissions = [("update", "update EarnedLeavePolicy")]
@@ -327,7 +328,7 @@ class Employee(User):
     employer_id = models.PositiveIntegerField()
     first_name = models.CharField(max_length=255, verbose_name='نام')
     last_name = models.CharField(max_length=255, verbose_name='نام خانوادگی')
-    national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی")
+    national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی",validators=[national_code_validation])
     personnel_code = models.CharField(max_length=250)
     workplace = models.ManyToManyField(Workplace)
     work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT)

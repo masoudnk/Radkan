@@ -1,4 +1,5 @@
 import ast
+import json
 from pickle import FALSE
 
 from django.contrib.admin.models import LogEntry, ADDITION, CHANGE, DELETION
@@ -36,10 +37,11 @@ from employer.get_request import current_request, current_data
           dispatch_uid='pre_save')
 def pre_save_signal(sender, instance, raw, using, update_fields, **kwargs):
     if sender._meta.app_label == get_this_app_name():
-        if instance.id:
+        if instance.id and FALSE:
             old_obj = sender.objects.get(pk=instance.pk)
             serialized_obj = serializers.serialize('json', [old_obj, instance])
-            deserialized_obj = ast.literal_eval(serialized_obj)
+            # deserialized_obj = ast.literal_eval(serialized_obj)
+            deserialized_obj = json.loads(serialized_obj)
             if deserialized_obj[0]['fields'] != deserialized_obj[1]['fields']:
                 LogEntry.objects.create(
                     user=current_request().user,

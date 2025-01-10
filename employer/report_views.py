@@ -9,10 +9,10 @@ from rest_framework.response import Response
 from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest, Workplace
 from employer.serializers import AttendeesSerializer, AbsenteesSerializer
 from employer.utilities import subtract_times, calculate_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes
-from employer.views import GET_METHOD_STR, DATE_FORMAT_STR
+from employer.views import  DATE_FORMAT_STR
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def get_employer_dashboard(request):
     shifts = WorkShiftPlan.objects.filter(date=now()).values_list("work_shift", flat=True)
     employees = Employee.objects.filter(work_shift__in=shifts).distinct()
@@ -187,13 +187,13 @@ def filter_employees_and_their_requests(request):  # a view request
     return result
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def report_employees_function(request):
     result = filter_employees_and_their_requests(request)
     return Response(result, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def get_employees_function_report_excel(request):
     # fixme this is placebo...
     #  workplaces_list = filter_employees_and_their_requests(request)
@@ -204,14 +204,14 @@ def get_employees_function_report_excel(request):
     return ExcelResponse(data, 'employees_function_report')
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def get_employee_report(request):
     employee = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
     report = create_employee_report(employee)
     return Response(report, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def report_personnel_leave(request):
     # todo filter to month and year
     employees = Employee.objects.filter(employer_id=request.user.id)
@@ -230,14 +230,14 @@ def report_personnel_leave(request):
             employee=employee, action=EmployeeRequest.STATUS_APPROVED)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def report_employee_traffic(request):
     emp = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
     report = create_employee_report(emp)
     return Response(report, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def get_employee_traffic_report_excel(request):
     # fixme this is placebo...
     #  workplaces_list = filter_employees_and_their_requests(request)
@@ -254,13 +254,13 @@ def filter_employee_and_lives(request):
     return report
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def report_employee_leave(request):
     report = filter_employee_and_lives(request)
     return Response(report, status=status.HTTP_200_OK)
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def get_employee_leave_report_excel(request):
     # fixme this is placebo...
     #  workplaces_list = filter_employee_and_lives(request)(request)
@@ -277,7 +277,7 @@ def filter_project_traffic(request):
     return report
 
 
-@api_view([GET_METHOD_STR])
+@api_view()
 def report_project_traffic(request):
     report = filter_employee_and_lives(request)
     return Response(report, status=status.HTTP_200_OK)
