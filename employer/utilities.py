@@ -1,10 +1,9 @@
 import random
 
-from django.contrib.auth.models import Permission
+import pandas as pd
 from django.core.exceptions import ValidationError
 from django.db.models import ExpressionWrapper, Sum, DurationField, F
-
-from employer.apps import get_this_app_name
+from django.http import HttpResponse
 
 
 def get_random_int_code(digits=4):
@@ -85,3 +84,23 @@ def national_code_validation(national_code: str):
         msg = "national-code is unacceptable"
         raise ValidationError(msg)
 
+
+def send_response_file(data, file_name, file_format='excel'):
+    df = pd.DataFrame(data)
+    print(file_format)
+    if file_format == 'excel':
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename={}.xlsx'.format(file_name)
+        df.to_excel(response, index=False, engine='openpyxl')
+    elif file_format == 'csv':
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename={}.csv'.format(file_name)
+        df.to_csv(response, index=False)
+    elif file_format == 'json':
+        response = HttpResponse(content_type='application/json')
+        response['Content-Disposition'] = 'attachment; filename={}.json'.format(file_name)
+        response.write(df.to_json(orient='records'))
+    else:
+        response = HttpResponse("Unsupported format", status=400)
+
+    return response

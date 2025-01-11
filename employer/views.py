@@ -5,14 +5,13 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.utils.timezone import now
-from excel_response import ExcelResponse
 from rest_framework import status
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from rest_framework.response import Response
 
 from employer.apps import get_this_app_name
 from employer.serializers import *
-from employer.utilities import national_code_validation
+from employer.utilities import national_code_validation, send_response_file
 from melipayamak import Api
 
 
@@ -319,10 +318,10 @@ def get_workplace(request, oid, **kwargs):
 @check_user_permission(VIEW_PERMISSION_STR, Workplace)
 def get_workplaces_excel(request, **kwargs):
     workplaces_list = get_list_or_404(Workplace, employer_id=kwargs["employer"])
-    data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
+    data = [["نام", "شهر", "آدرس", "محیط", "latitude", "longitude"]]
     for fin in workplaces_list:
-        data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
-    return ExcelResponse(data, 'workplaces')
+        data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude])
+    return send_response_file(data,'workplaces')
 
 
 @api_view()
@@ -407,7 +406,7 @@ def get_employees_excel(request, **kwargs):
         data.append([str(fin.mobile), fin.first_name, fin.last_name, fin.national_code, fin.personnel_code,
                      fin.workplace.name, fin.work_policy.name, fin.work_shift.name,
                      fin.shift_start_date.strftime(DATE_FORMAT_STR), fin.shift_end_date.strftime(DATE_FORMAT_STR)])
-    return ExcelResponse(data, 'employees')
+    return send_response_file(data, 'employees')
 
 
 @api_view()
@@ -742,7 +741,7 @@ def get_employee_requests_excel(request, **kwargs):
     for fin in data_list:
         data.append([fin.category.name, fin.employee.get_full_name(), fin.start_date.strftime(DATE_FORMAT_STR), fin.end_date.strftime(DATE_FORMAT_STR),
                      fin.registration_date.strftime(DATE_FORMAT_STR), fin.get_action_display(), ])
-    return ExcelResponse(data, 'employees')
+    return send_response_file(data, 'employees')
 
 
 @api_view()

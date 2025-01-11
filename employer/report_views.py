@@ -1,6 +1,5 @@
 from django.db.models import Q
 from django.utils.timezone import now
-from excel_response import ExcelResponse
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.generics import get_object_or_404
@@ -8,7 +7,7 @@ from rest_framework.response import Response
 
 from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest, Workplace
 from employer.serializers import AttendeesSerializer, AbsenteesSerializer
-from employer.utilities import subtract_times, calculate_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes
+from employer.utilities import subtract_times, calculate_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes, send_response_file
 from employer.views import DATE_FORMAT_STR, check_user_permission, VIEW_PERMISSION_STR, REPORT_PERMISSION_STR
 
 
@@ -204,7 +203,7 @@ def get_employees_function_report_excel(request):
     data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
     for fin in workplaces_list:
         data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
-    return ExcelResponse(data, 'employees_function_report')
+    return send_response_file(data, 'employees_function_report')
 
 
 @api_view()
@@ -252,7 +251,7 @@ def get_employee_traffic_report_excel(request):
     data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
     for fin in workplaces_list:
         data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
-    return ExcelResponse(data, 'employees_function_report')
+    return send_response_file(data, 'employees_function_report')
 
 
 def filter_employee_and_lives(request):
@@ -277,7 +276,7 @@ def get_employee_leave_report_excel(request):
     data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
     for fin in workplaces_list:
         data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
-    return ExcelResponse(data, 'employees_function_report')
+    return send_response_file(data, 'employees_function_report')
 
 
 def filter_project_traffic(request):
