@@ -637,6 +637,14 @@ def update_ticket_status(request, oid):
 def manage_and_create_employee_request(cpy_data):
     category = int(cpy_data["category"])
     if category == EmployeeRequest.CATEGORY_MANUAL_TRAFFIC:
+        try:
+            plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
+        except WorkShiftPlan.DoesNotExist:
+            plan = None
+        if plan is None:
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+        # todo continue and evaluate and make constraints
+
         ser = EmployeeRequestManualTrafficSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE:
         ser = EmployeeRequestHourlyEarnedLeaveSerializer(data=cpy_data)
@@ -667,6 +675,41 @@ def manage_and_create_employee_request(cpy_data):
         e = ser.save()
         return Response(EmployeeRequestOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# def manage_and_create_employee_request(cpy_data):
+#     category = int(cpy_data["category"])
+#     if category == EmployeeRequest.CATEGORY_MANUAL_TRAFFIC:
+#         ser = EmployeeRequestManualTrafficSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE:
+#         ser = EmployeeRequestHourlyEarnedLeaveSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE:
+#         ser = EmployeeRequestDailyEarnedLeaveSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_HOURLY_MISSION:
+#         ser = EmployeeRequestHourlyMissionSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_DAILY_MISSION:
+#         ser = EmployeeRequestDailyMissionSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_OVERTIME:
+#         ser = EmployeeRequestOvertimeSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE:
+#         ser = EmployeeRequestHourlySickLeaveSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE:
+#         ser = EmployeeRequestDailySickLeaveSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE:
+#         ser = EmployeeRequestHourlyUnpaidLeaveSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE:
+#         ser = EmployeeRequestDailyUnpaidLeaveSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_PROJECT_MANUAL_TRAFFIC:
+#         ser = EmployeeRequestProjectManualTrafficSerializer(data=cpy_data)
+#     elif category == EmployeeRequest.CATEGORY_SHIFT_ROTATION:
+#         ser = EmployeeRequestShiftChangeSerializer(data=cpy_data)
+#
+#     else:
+#         return Response({"msg": "category unaccepted"}, status=status.HTTP_400_BAD_REQUEST)
+#     if ser.is_valid():
+#         e = ser.save()
+#         return Response(EmployeeRequestOutputSerializer(e).data, status=status.HTTP_201_CREATED)
+#     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view([POST_METHOD_STR])
@@ -743,8 +786,6 @@ def get_employees_requests_list(request, **kwargs):
 @api_view([POST_METHOD_STR])
 @check_user_permission(ADD_PERMISSION_STR, WorkShift)
 def create_work_shift(request, **kwargs):
-    # cpy_data = request.data.copy()
-    # cpy_data["employer"] = request.user.id
     ser = WorkShiftSerializer(data=kwargs)
     if ser.is_valid():
         e = ser.save()
@@ -825,16 +866,8 @@ def get_work_shift_plan_choices(request, **kwargs):
 @api_view([POST_METHOD_STR])
 @check_user_permission(ADD_PERMISSION_STR, WorkShift)
 def create_work_shift_plan(request, **kwargs):
-    # cpy_data = request.data.copy()
-    # is_many = False
-    # if isinstance(request.data, list):
-    #     is_many = True
-    #     for item in cpy_data:
-    #         item["employer"] = request.user.id
-    # else:
-    #     cpy_data["employer"] = request.user.id
-
-    ser, is_many = handle_single_or_list_objects(request.data, kwargs["employer"], WorkShiftPlanSerializer)
+    # ser, is_many = handle_single_or_list_objects(request.data, kwargs["employer"], WorkShiftPlanSerializer)
+    ser, is_many = handle_single_or_list_objects(request.data, kwargs["employer"], WorkShiftPlanUpdateSerializer)
     if ser.is_valid():
         e = ser.save()
         return Response(WorkShiftPlanOutputSerializer(e, many=is_many).data, status=status.HTTP_201_CREATED)

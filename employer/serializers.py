@@ -519,44 +519,26 @@ class RegisterManagerSerializer(serializers.ModelSerializer):
 
 
 class ManagerOutputSerializer(serializers.ModelSerializer):
-    expiration_date=serializers.DateTimeField(format=DATE_TIME_FORMAT_STR)
+    expiration_date = serializers.DateTimeField(format=DATE_TIME_FORMAT_STR)
+
     class Meta:
         model = Manager
         fields = ("expiration_date", "username", "mobile")
 
 
 class WorkShiftPlanListSerializer(serializers.ListSerializer):
-    # def create(self, validated_data):
-    #     result = [self.child.create(attrs) for attrs in validated_data]
-    #     try:
-    #         self.child.Meta.model.objects.bulk_create(result)
-    #     except IntegrityError as e:
-    #         raise ValidationError(e)
-    #     return result
     def create(self, validated_data):
         books = [WorkShiftPlan(**item) for item in validated_data]
         return WorkShiftPlan.objects.bulk_create(books)
 
     def update(self, instance, validated_data):
-        # Maps for id->instance and id->data item.
         plans_mapping = {plan.id: plan for plan in instance}
         data_mapping = {item['id']: item for item in validated_data}
-
-        # Perform creations and updates.
         ret = []
         for plan_id, data in data_mapping.items():
             plan = plans_mapping.get(plan_id, None)
-            # if plan is None:
-            #     ret.append(self.child.create(data))
-            # else:
             if plan is not None:
                 ret.append(self.child.update(plan, data))
-
-        # Perform deletions.
-        # for plan_id, plan in plans_mapping.items():
-        #     if plan_id not in data_mapping:
-        #         plan.delete()
-
         return ret
 
 
