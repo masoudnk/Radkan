@@ -9,10 +9,11 @@ from rest_framework.response import Response
 from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest, Workplace
 from employer.serializers import AttendeesSerializer, AbsenteesSerializer
 from employer.utilities import subtract_times, calculate_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes
-from employer.views import  DATE_FORMAT_STR
+from employer.views import DATE_FORMAT_STR, check_user_permission, VIEW_PERMISSION_STR, REPORT_PERMISSION_STR
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employer_dashboard(request):
     shifts = WorkShiftPlan.objects.filter(date=now()).values_list("work_shift", flat=True)
     employees = Employee.objects.filter(work_shift__in=shifts).distinct()
@@ -188,12 +189,14 @@ def filter_employees_and_their_requests(request):  # a view request
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def report_employees_function(request):
     result = filter_employees_and_their_requests(request)
     return Response(result, status=status.HTTP_200_OK)
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employees_function_report_excel(request):
     # fixme this is placebo...
     #  workplaces_list = filter_employees_and_their_requests(request)
@@ -205,6 +208,7 @@ def get_employees_function_report_excel(request):
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employee_report(request):
     employee = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
     report = create_employee_report(employee)
@@ -212,6 +216,7 @@ def get_employee_report(request):
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def report_personnel_leave(request):
     # todo filter to month and year
     employees = Employee.objects.filter(employer_id=request.user.id)
@@ -231,6 +236,7 @@ def report_personnel_leave(request):
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def report_employee_traffic(request):
     emp = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
     report = create_employee_report(emp)
@@ -238,6 +244,7 @@ def report_employee_traffic(request):
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employee_traffic_report_excel(request):
     # fixme this is placebo...
     #  workplaces_list = filter_employees_and_their_requests(request)
@@ -255,12 +262,14 @@ def filter_employee_and_lives(request):
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def report_employee_leave(request):
     report = filter_employee_and_lives(request)
     return Response(report, status=status.HTTP_200_OK)
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employee_leave_report_excel(request):
     # fixme this is placebo...
     #  workplaces_list = filter_employee_and_lives(request)(request)
@@ -278,6 +287,7 @@ def filter_project_traffic(request):
 
 
 @api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def report_project_traffic(request):
     report = filter_employee_and_lives(request)
     return Response(report, status=status.HTTP_200_OK)

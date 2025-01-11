@@ -1,7 +1,10 @@
 import random
 
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.db.models import ExpressionWrapper, Sum, DurationField, F
+
+from employer.apps import get_this_app_name
 
 
 def get_random_int_code(digits=4):
@@ -54,12 +57,12 @@ def national_code_validation(national_code: str):
     msg = ""
     if not national_code.isdecimal():
         msg = "national-code must be a decimal number"
-        raise ValidationError( msg)
+        raise ValidationError(msg)
     length = len(national_code)
     if length != 10:
         if 8 > length or length > 10:
             msg = "national-code must be 10 digits"
-            raise ValidationError( msg)
+            raise ValidationError(msg)
         code = ((10 - length) * "0") + national_code
     else:
         code = national_code
@@ -68,16 +71,17 @@ def national_code_validation(national_code: str):
         total += int(c) * (10 - i)
     if total == 0:
         msg = "national-code is unacceptable"
-        raise ValidationError( msg)
+        raise ValidationError(msg)
     controller = total % 11
     if controller < 2:
         if controller == int(national_code[-1]):
             return
         else:
             msg = "invalid controller"
-            raise ValidationError( msg)
+            raise ValidationError(msg)
     elif controller == (11 - int(national_code[-1])):
         return
     else:
         msg = "national-code is unacceptable"
-        raise ValidationError( msg)
+        raise ValidationError(msg)
+

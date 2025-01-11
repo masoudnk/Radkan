@@ -104,20 +104,20 @@ class Manager(User):
 class Employer(User):
     email = models.EmailField(verbose_name='email address', max_length=255, unique=True, )
     accepted_rules = models.BooleanField(default=False)
-    national_code = models.CharField(max_length=250, null=True, blank=True,validators=[national_code_validation])
+    national_code = models.CharField(max_length=250, null=True, blank=True, validators=[national_code_validation])
     # image = models.ImageField(upload_to=get_employer_image_file_path, max_length=255, verbose_name='عکس پروفایل', null=True, blank=True)
     GENDER_CHOICES = {
         True: 'آقا',
         False: 'خانم',
     }
-    is_male = models.BooleanField(null=True, blank=True, default=GENDER_CHOICES[True], choices=GENDER_CHOICES, verbose_name='جنسیت')
+    is_male = models.BooleanField(default=True, choices=GENDER_CHOICES, verbose_name='جنسیت')
     PERSONALITY_PERSONAL = 1
     PERSONALITY_LEGAL = 2
     PERSONALITY_CHOICES = {
         PERSONALITY_PERSONAL: 'حقیقی',
         PERSONALITY_LEGAL: 'حقوقی',
     }
-    personality = models.PositiveSmallIntegerField(default=PERSONALITY_CHOICES[1], choices=PERSONALITY_CHOICES, verbose_name='نوع کاربری')
+    personality = models.PositiveSmallIntegerField(default=PERSONALITY_PERSONAL, choices=PERSONALITY_CHOICES, verbose_name='نوع کاربری')
     birth_date = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ تولد')
     phone = PhoneNumberField(verbose_name='تلفن', null=True, blank=True)
     postal_code = models.CharField(max_length=10, validators=[int_list_validator(sep=''), MinLengthValidator(10), ], null=True, blank=True, )
@@ -168,7 +168,7 @@ class AttendanceDevice(models.Model):
     port = models.PositiveSmallIntegerField(default=4730)
     brand = models.ForeignKey(AttendanceDeviceBrand, on_delete=models.PROTECT)
     ip_address = models.GenericIPAddressField()
-    is_online = models.BooleanField(null=True, blank=True, default=STATUS_CHOICES[True], choices=STATUS_CHOICES, verbose_name='وضعیت دستگاه')
+    is_online = models.BooleanField(null=True, blank=True, default=True, choices=STATUS_CHOICES, verbose_name='وضعیت دستگاه')
 
 
 class Workplace(models.Model):
@@ -208,9 +208,9 @@ class WorkPolicy(models.Model):
 class BasePolicy(models.Model):
     work_policy = models.OneToOneField(WorkPolicy, on_delete=models.CASCADE)
     maximum_hour_per_year = models.PositiveSmallIntegerField(help_text="minutes")
-    maximum_minute_per_year = models.PositiveSmallIntegerField(help_text="minutes",validators=[MaxValueValidator(59)])
+    maximum_minute_per_year = models.PositiveSmallIntegerField(help_text="minutes", validators=[MaxValueValidator(59)])
     maximum_hour_per_month = models.PositiveSmallIntegerField(help_text="minutes")
-    maximum_minute_per_month = models.PositiveSmallIntegerField(help_text="minutes",validators=[MaxValueValidator(59)])
+    maximum_minute_per_month = models.PositiveSmallIntegerField(help_text="minutes", validators=[MaxValueValidator(59)])
 
     class Meta:
         abstract = True
@@ -260,7 +260,7 @@ class EarnedLeavePolicy(LeavePolicy):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     year = models.PositiveSmallIntegerField()
     maximum_earned_leave_for_next_year_hour = models.PositiveSmallIntegerField(help_text="hour")
-    maximum_earned_leave_for_next_year_minutes = models.PositiveSmallIntegerField(help_text="minutes",validators=[MaxValueValidator(59)])
+    maximum_earned_leave_for_next_year_minutes = models.PositiveSmallIntegerField(help_text="minutes", validators=[MaxValueValidator(59)])
 
     class Meta:
         permissions = [("update", "update EarnedLeavePolicy")]
@@ -290,6 +290,10 @@ class WorkShift(models.Model):
     observance_of_public_holidays = models.BooleanField(default=False)
     year = models.PositiveSmallIntegerField()
 
+    class Meta:
+        permissions = (
+            ("view_report", "Can view report"),)
+
 
 class WorkShiftPlan(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
@@ -301,7 +305,7 @@ class WorkShiftPlan(models.Model):
         SIMPLE_PLAN_TYPE: "ساده",
         FLOATING_PLAN_TYPE: "شناور",
     }
-    plan_type = models.PositiveSmallIntegerField(choices=PLAN_TYPE_CHOICES, default=PLAN_TYPE_CHOICES[1])
+    plan_type = models.PositiveSmallIntegerField(choices=PLAN_TYPE_CHOICES, default=SIMPLE_PLAN_TYPE)
     daily_duty_duration = models.PositiveSmallIntegerField(help_text="minutes", null=True, blank=True)
     floating_time = models.PositiveSmallIntegerField(help_text="minutes", null=True, blank=True)
     daily_overtime_limit = models.PositiveSmallIntegerField()
@@ -328,7 +332,7 @@ class Employee(User):
     employer_id = models.PositiveIntegerField()
     first_name = models.CharField(max_length=255, verbose_name='نام')
     last_name = models.CharField(max_length=255, verbose_name='نام خانوادگی')
-    national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی",validators=[national_code_validation])
+    national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی", validators=[national_code_validation])
     personnel_code = models.CharField(max_length=250)
     workplace = models.ManyToManyField(Workplace)
     work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT)
@@ -396,7 +400,7 @@ class EmployeeRequest(models.Model):
         STATUS_APPROVED: "تایید شده",
         STATUS_REJECTED: "رد شده",
     }
-    status = models.PositiveSmallIntegerField(choices=STATUS_CHOICES, default=STATUS_CHOICES[1])
+    status = models.PositiveSmallIntegerField(choices=STATUS_CHOICES, default=STATUS_UNDER_REVIEW)
     description = models.TextField(null=True, blank=True)
     workplace = models.ForeignKey(Workplace, on_delete=models.PROTECT, null=True, blank=True)
     date = jmodels.jDateField(null=True, blank=True)

@@ -1,8 +1,8 @@
-import ast
 import json
 from pickle import FALSE
 
 from django.contrib.admin.models import LogEntry, ADDITION, CHANGE, DELETION
+from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core import serializers
 from django.db.models.signals import pre_save, pre_delete, post_delete, m2m_changed, post_save
@@ -10,6 +10,10 @@ from django.dispatch import receiver
 
 from employer.apps import get_this_app_name
 from employer.get_request import current_request, current_data
+from employer.models import Manager, Employer, MelliSMSInfo, Workplace, RTSP, WorkPolicy, ManualTrafficPolicy, OvertimePolicy, LeavePolicy, EarnedLeavePolicy, SickLeavePolicy, \
+    WorkMissionPolicy, Holiday, WorkShift, WorkShiftPlan, Employee, EmployeeRequest, Project, WorkCategory, RadkanMessage
+from employer.serializers import PermissionSerializer
+from employer.views import get_acceptable_permissions
 
 
 # def receiver_with_multiple_senders(signal, senders, **kwargs):
@@ -43,15 +47,15 @@ def pre_save_signal(sender, instance, raw, using, update_fields, **kwargs):
             # deserialized_obj = ast.literal_eval(serialized_obj)
             deserialized_obj = json.loads(serialized_obj)
             if deserialized_obj[0]['fields'] != deserialized_obj[1]['fields']:
-                LogEntry.objects.create(
-                    user=current_request().user,
-                    content_type=ContentType.objects.get_for_model(instance),
-                    object_id=instance.id,
-                    object_repr=str(instance),
-                    action_flag=CHANGE,
-                    change_message="old:{},new:{}".format(deserialized_obj[0]['fields'], deserialized_obj[1]['fields'])
-                )
-
+                if current_request() and current_request().user and current_request().user.is_authenticated:
+                    LogEntry.objects.create(
+                        user=current_request().user,
+                        content_type=ContentType.objects.get_for_model(instance),
+                        object_id=instance.id,
+                        object_repr=str(instance),
+                        action_flag=CHANGE,
+                        change_message="old:{},new:{}".format(deserialized_obj[0]['fields'], deserialized_obj[1]['fields'])
+                    )
 
 
 @receiver(post_save,
@@ -60,14 +64,24 @@ def pre_save_signal(sender, instance, raw, using, update_fields, **kwargs):
 def post_save_signal(sender, instance, created, raw, using, update_fields, **kwargs):
     if sender._meta.app_label == get_this_app_name():
         if created:
-            LogEntry.objects.create(
-                user=current_request().user,
-                content_type=ContentType.objects.get_for_model(instance),
-                object_id=instance.id,
-                object_repr=str(instance),
-                action_flag=ADDITION,
-                change_message=current_data()
-            )
+            if current_request() and current_request().user and current_request().user.is_authenticated:
+                LogEntry.objects.create(
+                    user=current_request().user,
+                    content_type=ContentType.objects.get_for_model(instance),
+                    object_id=instance.id,
+                    object_repr=str(instance),
+                    action_flag=ADDITION,
+                    change_message=current_data()
+                )
+
+
+@receiver(post_save,
+          sender=Employer,
+          weak=FALSE,
+          dispatch_uid='post_save')
+def employer_exclusively_post_save_signal(sender, instance, created, raw, using, update_fields, **kwargs):
+    if created:
+        instance.user_permissions.add(*get_acceptable_permissions(Employer))
 
 
 @receiver(pre_delete,
