@@ -69,11 +69,11 @@ SIMPLE_JWT = {
 }
 ADMINS = [("Masoud Najafzadeh", "masoudnk2@gmail.com"), ]
 DEFAULT_FROM_EMAIL = 'masoud@radkan.com'
-
-# EMAIL_HOST
-# EMAIL_HOST_PASSWORD
-# EMAIL_HOST_USER
-# EMAIL_PORT
+# todo get email data
+#  EMAIL_HOST
+#  EMAIL_HOST_PASSWORD
+#  EMAIL_HOST_USER
+#  EMAIL_PORT
 EMAIL_USE_LOCALTIME = True
 
 JALALI_DATE_DEFAULTS = {

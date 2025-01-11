@@ -1,19 +1,3 @@
-"""
-URL configuration for Radkan project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.urls import path
 
 from employer import views, policy_views, report_views, employee_views
@@ -34,7 +18,6 @@ urlpatterns = [
     path('get_ticket_sections_list/', views.get_ticket_sections_list, name='get_ticket_sections_list'),
     path('create_employee_request/', views.create_employee_request, name='create_employee_request'),
     path('get_employees_requests_list/', views.get_employees_requests_list, name='get_employees_requests_list'),
-    # path('employer_login/', views.employer_login, name='employer_login'),
     path('get_employer_profile/', views.get_employer_profile, name='get_employer_profile'),
     path('update_employer_info/', views.update_employer_info, name='update_employer_info'),
     path('create_work_shift/', views.create_work_shift, name='create_work_shift'),
@@ -87,7 +70,6 @@ urlpatterns = [
     path('get_employee_profile/', employee_views.get_employee_profile, name='get_employee_profile'),
     path('get_employee_work_shift_plans_list/', employee_views.get_employee_work_shift_plans_list, name='get_employee_work_shift_plans_list'),
     path('get_message/<int:oid>/', employee_views.get_message, name='get_message'),
-
     path('get_roll_calls_list/<int:year>/<int:month>/', employee_views.get_roll_calls_list, name='get_roll_calls_list'),
     path('get_employee_requests_list/<int:year>/<int:month>/', employee_views.get_employee_requests_list, name='get_employee_requests_list'),
     path('get_employee_report/<int:year>/<int:month>/', employee_views.get_employee_report, name='get_employee_report'),
@@ -109,7 +91,6 @@ urlpatterns = [
     path('create_overtime_policy/', policy_views.create_overtime_policy, name='create_overtime_policy'),
     path('create_manual_traffic_policy/', policy_views.create_manual_traffic_policy, name='create_manual_traffic_policy'),
     path('create_work_mission_policy/', policy_views.create_work_mission_policy, name='create_work_mission_policy'),
-
     path('delete_work_policy/<int:oid>/', policy_views.delete_work_policy, name='delete_work_policy'),
 
 ]

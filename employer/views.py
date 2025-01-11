@@ -1,9 +1,7 @@
 from datetime import timedelta
 
 import openpyxl
-from django.contrib.auth.hashers import check_password
 from django.core.exceptions import PermissionDenied
-from django.core.mail import send_mail
 from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.utils.timezone import now
@@ -17,11 +15,8 @@ from employer.serializers import *
 from employer.utilities import national_code_validation
 from melipayamak import Api
 
-from employer.models import Manager, Employer, MelliSMSInfo, Workplace, RTSP, WorkPolicy, ManualTrafficPolicy, OvertimePolicy, LeavePolicy, EarnedLeavePolicy, SickLeavePolicy, \
-    WorkMissionPolicy, Holiday, WorkShift, WorkShiftPlan, Employee, EmployeeRequest, Project, WorkCategory, RadkanMessage
 
-
-def get_acceptable_permissions(model=Manager,filters=None):
+def get_acceptable_permissions(model=Manager, filters=None):
     base_list = [WorkShift, WorkShiftPlan, Workplace, Employee, Holiday, EmployeeRequest, Project, WorkCategory,
                  WorkPolicy, ManualTrafficPolicy, OvertimePolicy, LeavePolicy, EarnedLeavePolicy, SickLeavePolicy,
                  WorkMissionPolicy, RadkanMessage]
@@ -31,8 +26,9 @@ def get_acceptable_permissions(model=Manager,filters=None):
     model_names = [m.__name__.lower() for m in base_list]
     perms = Permission.objects.filter(content_type__model__in=model_names, content_type__app_label=get_this_app_name())
     if filters:
-        perms=perms.filter(codename__in=filters)
+        perms = perms.filter(codename__in=filters)
     return perms
+
 
 POST_METHOD_STR = "POST"
 # GET_METHOD_STR = "GET"
@@ -59,6 +55,7 @@ def test(request, **kwargs):
 def check_user_permission(action, model):
     def decorator(function):
         def wrapper(request, *args, **kwargs):
+            print("request.user:", request.user.id)
             kwargs.update(request.data.copy())
             try:
                 employer = Employer.objects.get(id=request.user.id, is_active=True)
@@ -93,6 +90,7 @@ def check_user_permission(action, model):
 
 
 def send_sms():
+    # todo get melli payamak info
     username = 'username'
     password = 'password'
     api = Api(username, password)
@@ -148,17 +146,22 @@ def change_password(request, **kwargs):
     if request_list.exists():
         active_request = request_list.last()
         if active_request.code == int(request.POST.get('code')):
-            employer = Employer.objects.get(id=user.id)
-            employer.set_password(password)
-            employer.save()
+            user.set_password(password)
+            user.save()
             active_request.active = False
             active_request.save()
-            if employer.email:
-                send_mail(
-                    "changed password",
-                    "Here is the message.",
-                    recipient_list=[employer.email],
-                )
+            try:
+                employer = Employer.objects.get(id=user.id)
+                # todo send email
+                # if employer.email:
+                #     send_mail(
+                #         "changed password",
+                #         "Here is the message.",
+                #         from_email=None,
+                #         recipient_list=[employer.email],
+                #     )
+            except Employer.DoesNotExist as e:
+                pass
 
             return Response({"msg": "password changed"}, status=status.HTTP_200_OK)
     return Response({"msg": "unacceptable information"}, status=status.HTTP_400_BAD_REQUEST)
@@ -189,15 +192,15 @@ def create_password_reset_request(request, **kwargs):
         return Response({"msg": "created"}, status=status.HTTP_201_CREATED)
 
 
-def get_user_or_none(mobile=None, password=None):
-    try:
-        user = User.objects.get(mobile=mobile)
-        if check_password(password, user.password):
-            return user
-
-    except User.DoesNotExist:
-        pass
-    return None
+# def get_user_or_none(mobile=None, password=None):
+#     try:
+#         user = User.objects.get(mobile=mobile)
+#         if check_password(password, user.password):
+#             return user
+#
+#     except User.DoesNotExist:
+#         pass
+#     return None
 
 
 # @api_view([POST_METHOD_STR])
@@ -282,7 +285,7 @@ def import_work_places_excel(request, **kwargs):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([POST_METHOD_STR])
+@api_view([PUT_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, Workplace)
 def update_work_place(request, oid, **kwargs):
     wp = get_object_or_404(Workplace, employer_id=kwargs["employer"], id=oid)
@@ -290,14 +293,16 @@ def update_work_place(request, oid, **kwargs):
     ser = WorkplaceOutputSerializer(data=request.data, instance=wp, partial=True)
     if ser.is_valid():
         w = ser.save()
-        return Response(WorkplaceOutputSerializer(instance=w).data, status=status.HTTP_201_CREATED)
+        return Response(WorkplaceOutputSerializer(instance=w).data, status=status.HTTP_200_OK)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, Workplace)
 def get_workplaces_list(request, **kwargs):
-    workplaces_list = get_list_or_404(Workplace, employer_id=kwargs["employer"])
+    workplaces_list = Workplace.objects.filter(employer_id=kwargs["employer"])
+    if "order_by" in kwargs:
+        workplaces_list = workplaces_list.order_by(kwargs["order_by"])
     ser = WorkplaceOutputSerializer(workplaces_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -326,14 +331,17 @@ def search_workplaces(request, **kwargs):
     name = request.GET.get('name')
     city = request.GET.get('city')
     employer = Employer.objects.get(id=kwargs["employer"])
+    result=employer.workplace_set
     if name and city:
-        result = employer.workplace_set.filter(name__icontains=name, city__icontains=city)
+        result = result.filter(name__icontains=name, city__icontains=city)
     elif name:
-        result = employer.workplace_set.filter(employer=request.user, name__icontains=name)
+        result = result.filter(employer=request.user, name__icontains=name)
     elif city:
-        result = employer.workplace_set.filter(employer=request.user, city__name__icontains=city)
+        result = result.filter(employer=request.user, city__name__icontains=city)
     else:
         return Response({"msg": "invalid name or city"}, status=status.HTTP_400_BAD_REQUEST)
+    if "order_by" in kwargs:
+        result = result.order_by(kwargs["order_by"])
     ser = WorkplaceOutputSerializer(result, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -353,7 +361,7 @@ def delete_workplace(request, oid, **kwargs):
 @check_user_permission(ADD_PERMISSION_STR, Employee)
 def create_employee(request, **kwargs):
     cpy_data = request.data.copy()
-    cpy_data["employer_id"] =  kwargs["employer"]
+    cpy_data["employer_id"] = kwargs["employer"]
     ser = EmployeeSerializer(data=cpy_data)
     if ser.is_valid():
         # print(ser.validated_data)
@@ -773,7 +781,7 @@ def search_work_shift(request, **kwargs):
 @api_view([DELETE_METHOD_STR])
 @check_user_permission(DELETE_PERMISSION_STR, WorkShift)
 def delete_work_shift(request, oid, **kwargs):
-    o = get_object_or_404(WorkShift, employer_id= kwargs["employer"], id=oid)
+    o = get_object_or_404(WorkShift, employer_id=kwargs["employer"], id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
@@ -781,7 +789,7 @@ def delete_work_shift(request, oid, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, WorkShift)
 def get_work_shifts_list(request, **kwargs):
-    shifts = WorkShift.objects.filter(employer_id= kwargs["employer"])
+    shifts = WorkShift.objects.filter(employer_id=kwargs["employer"])
     ser = WorkShiftOutputSerializer(shifts, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -852,8 +860,8 @@ def create_work_shift_plan(request, **kwargs):
 def update_work_shift_plan(request, **kwargs):
     cpy_data = request.data.copy()
     for item in cpy_data:
-        item["employer"] =  kwargs["employer"]
-    work_shift_plans = get_list_or_404(WorkShiftPlan, employer_id= kwargs["employer"], work_shift_id=cpy_data[0]["work_shift"])
+        item["employer"] = kwargs["employer"]
+    work_shift_plans = get_list_or_404(WorkShiftPlan, employer_id=kwargs["employer"], work_shift_id=cpy_data[0]["work_shift"])
     ser = WorkShiftPlanUpdateSerializer(data=cpy_data, instance=work_shift_plans, many=True)
     if ser.is_valid():
         e = ser.save()
@@ -864,7 +872,7 @@ def update_work_shift_plan(request, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, WorkShift)
 def get_work_shift_plans_list(request, oid, **kwargs):
-    shift = get_object_or_404(WorkShift, employer_id= kwargs["employer"], id=oid)
+    shift = get_object_or_404(WorkShift, employer_id=kwargs["employer"], id=oid)
     ser = WorkShiftPlanOutputSerializer(shift.workshiftplan_set.all(), many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -873,11 +881,11 @@ def get_work_shift_plans_list(request, oid, **kwargs):
 @check_user_permission(ADD_PERMISSION_STR, Manager)
 def create_manager(request, **kwargs):
     cpy_data = request.data.copy()
-    cpy_data["employer_id"] =  kwargs["employer"]
+    cpy_data["employer_id"] = kwargs["employer"]
     ser = ManagerSerializer(data=cpy_data)
     if ser.is_valid():
         e = ser.save()
-        perms=get_acceptable_permissions(filters=request.data.get("permissions")).values_list("id", flat=True)
+        perms = get_acceptable_permissions(filters=request.data.get("permissions")).values_list("id", flat=True)
         e.user_permissions.add(*perms)
         return Response(ManagerOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -886,14 +894,14 @@ def create_manager(request, **kwargs):
 @api_view([POST_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, Manager)
 def update_manager(request, oid, **kwargs):
-    mg = get_object_or_404(Manager, employer_id= kwargs["employer"], id=oid)
+    mg = get_object_or_404(Manager, employer_id=kwargs["employer"], id=oid)
     ser = ManagerOutputSerializer(instance=mg, data=request.data, partial=True)
     if ser.is_valid():
         mg = ser.save()
     else:
         return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
     if "permissions" in request.data:
-        perms=get_acceptable_permissions(filters=request.data.get("permissions")).values_list("id", flat=True)
+        perms = get_acceptable_permissions(filters=request.data.get("permissions")).values_list("id", flat=True)
         mg.user_permissions.add(*perms)
     return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
 
@@ -901,20 +909,20 @@ def update_manager(request, oid, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, Manager)
 def get_managers_list(request, **kwargs):
-    mg = get_list_or_404(Manager, employer_id= kwargs["employer"])
+    mg = get_list_or_404(Manager, employer_id=kwargs["employer"])
     return Response(ManagerOutputSerializer(mg, many=True).data, status=status.HTTP_201_CREATED)
 
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, Manager)
 def get_manager(request, oid, **kwargs):
-    mg = get_object_or_404(Manager, employer_id= kwargs["employer"], id=oid)
+    mg = get_object_or_404(Manager, employer_id=kwargs["employer"], id=oid)
     return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
 
 
 @api_view([DELETE_METHOD_STR])
 @check_user_permission(DELETE_PERMISSION_STR, Manager)
 def delete_manager(request, oid, **kwargs):
-    o = get_object_or_404(Manager, employer_id= kwargs["employer"], id=oid)
+    o = get_object_or_404(Manager, employer_id=kwargs["employer"], id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
