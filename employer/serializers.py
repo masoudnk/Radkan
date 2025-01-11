@@ -4,7 +4,7 @@ from django.core import exceptions
 from rest_framework import serializers
 
 from .models import *
-from .utilities import national_code_validation
+from .utilities import national_code_validation, DATE_TIME_FORMAT_STR
 
 
 class PermissionSerializer(serializers.ModelSerializer):
@@ -293,6 +293,34 @@ class WorkPolicyOutputSerializer(serializers.ModelSerializer):
 
 
 class EarnedLeavePolicySerializer(serializers.ModelSerializer):
+    def validate(self, data):
+        errors = dict()
+        maximum_hour_per_year = int(data["maximum_hour_per_year"])
+        maximum_minute_per_year = int(data["maximum_minute_per_year"])
+        year_total = (maximum_hour_per_year * 60) + maximum_minute_per_year
+
+        maximum_hour_per_month = int(data["maximum_hour_per_month"])
+        maximum_minute_per_month = int(data["maximum_minute_per_month"])
+        month_total = (maximum_hour_per_month * 60) + maximum_minute_per_month
+        if month_total > year_total:
+            errors["month_total"] = "مقدار اضافه کاری ماهانه بیشتر از اضافه کاری کل سال است"
+
+        maximum_earned_leave_for_next_year_hour = int(data["maximum_earned_leave_for_next_year_hour"])
+        maximum_earned_leave_for_next_year_minutes = int(data["maximum_earned_leave_for_next_year_minutes"])
+        next_year_total = (maximum_earned_leave_for_next_year_hour * 60) + maximum_earned_leave_for_next_year_minutes
+
+        if next_year_total > year_total:
+            errors["next_year_total"] = "مقدار مرخصی قابل انتقال به سال بعد بیشتر از مرخصی کل سال است"
+
+        if int(data['maximum_daily_request_per_year']) < int(data['maximum_daily_request_per_month']):
+            errors["maximum_daily_request_per_month"] = "تعداد درخواست مرخصی روزانه ماهانه بیشتر از سالانه است"
+        if int(data['maximum_hourly_request_per_year']) < int(data['maximum_hourly_request_per_month']):
+            errors["maximum_hourly_request_per_year"] = "تعداد درخواست مرخصی ساعتی ماهانه بیشتر از سالانه است"
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(EarnedLeavePolicySerializer, self).validate(data)
+
     class Meta:
         model = EarnedLeavePolicy
         exclude = ()
@@ -305,6 +333,28 @@ class EarnedLeavePolicyOutputSerializer(serializers.ModelSerializer):
 
 
 class SickLeavePolicySerializer(serializers.ModelSerializer):
+    def validate(self, data):
+        errors = dict()
+        maximum_hour_per_year = int(data["maximum_hour_per_year"])
+        maximum_minute_per_year = int(data["maximum_minute_per_year"])
+        year_total = (maximum_hour_per_year * 60) + maximum_minute_per_year
+
+        maximum_hour_per_month = int(data["maximum_hour_per_month"])
+        maximum_minute_per_month = int(data["maximum_minute_per_month"])
+        month_total = (maximum_hour_per_month * 60) + maximum_minute_per_month
+
+        if month_total > year_total:
+            errors["month_total"] = "مقدار مرخصی ماهانه بیشتر از مرخصی کل سال است"
+
+        if int(data['maximum_daily_request_per_year']) < int(data['maximum_daily_request_per_month']):
+            errors["maximum_daily_request_per_month"] = "تعداد درخواست مرخصی روزانه ماهانه بیشتر از سالانه است"
+        if int(data['maximum_hourly_request_per_year']) < int(data['maximum_hourly_request_per_month']):
+            errors["maximum_hourly_request_per_year"] = "تعداد درخواست مرخصی ساعتی ماهانه بیشتر از سالانه است"
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(SickLeavePolicySerializer, self).validate(data)
+
     class Meta:
         model = SickLeavePolicy
         exclude = ()
@@ -317,6 +367,28 @@ class SickLeavePolicyOutputSerializer(serializers.ModelSerializer):
 
 
 class OvertimePolicySerializer(serializers.ModelSerializer):
+    def validate(self, data):
+        errors = dict()
+        maximum_hour_per_year = int(data["maximum_hour_per_year"])
+        maximum_minute_per_year = int(data["maximum_minute_per_year"])
+        year_total = (maximum_hour_per_year * 60) + maximum_minute_per_year
+
+        maximum_hour_per_month = int(data["maximum_hour_per_month"])
+        maximum_minute_per_month = int(data["maximum_minute_per_month"])
+        month_total = (maximum_hour_per_month * 60) + maximum_minute_per_month
+
+        if month_total > year_total:
+            errors["month_total"] = "مقدار اضافه کاری ماهانه بیشتر از اضافه کاری کل سال است"
+
+        if int(data['maximum_daily_request_per_year']) < int(data['maximum_daily_request_per_month']):
+            errors["maximum_daily_request_per_month"] = "تعداد درخواست مرخصی روزانه ماهانه بیشتر از سالانه است"
+        if int(data['maximum_hourly_request_per_year']) < int(data['maximum_hourly_request_per_month']):
+            errors["maximum_hourly_request_per_year"] = "تعداد درخواست مرخصی ساعتی ماهانه بیشتر از سالانه است"
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(OvertimePolicySerializer, self).validate(data)
+
     class Meta:
         model = OvertimePolicy
         exclude = ()
@@ -329,6 +401,15 @@ class OvertimePolicyOutputSerializer(serializers.ModelSerializer):
 
 
 class ManualTrafficPolicySerializer(serializers.ModelSerializer):
+    def validate(self, data):
+        errors = dict()
+        if int(data['maximum_per_year']) < int(data['maximum_per_month']):
+            errors["maximum_per_year"] = "تعداد درخواست تردد دستی ماهانه بیشتر از سالانه است"
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(ManualTrafficPolicySerializer, self).validate(data)
+
     class Meta:
         model = ManualTrafficPolicy
         exclude = ()
@@ -341,6 +422,27 @@ class ManualTrafficPolicyOutputSerializer(serializers.ModelSerializer):
 
 
 class WorkMissionPolicySerializer(serializers.ModelSerializer):
+    def validate(self, data):
+        errors = dict()
+        maximum_hour_per_year = int(data["maximum_hour_per_year"])
+        maximum_minute_per_year = int(data["maximum_minute_per_year"])
+        year_total = (maximum_hour_per_year * 60) + maximum_minute_per_year
+
+        maximum_hour_per_month = int(data["maximum_hour_per_month"])
+        maximum_minute_per_month = int(data["maximum_minute_per_month"])
+        month_total = (maximum_hour_per_month * 60) + maximum_minute_per_month
+        if month_total > year_total:
+            errors["month_total"] = "مقدار ماموریت ماهانه بیشتر از سال است"
+
+        if int(data['maximum_daily_request_per_year']) < int(data['maximum_daily_request_per_month']):
+            errors["maximum_daily_request_per_month"] = "تعداد درخواست ماموریت روزانه ماهانه بیشتر از سالانه است"
+        if int(data['maximum_hourly_request_per_year']) < int(data['maximum_hourly_request_per_month']):
+            errors["maximum_hourly_request_per_year"] = "تعداد درخواست ماموریت ساعتی ماهانه بیشتر از سالانه است"
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super(WorkMissionPolicySerializer, self).validate(data)
+
     class Meta:
         model = WorkMissionPolicy
         exclude = ()
@@ -417,9 +519,10 @@ class RegisterManagerSerializer(serializers.ModelSerializer):
 
 
 class ManagerOutputSerializer(serializers.ModelSerializer):
+    expiration_date=serializers.DateTimeField(format=DATE_TIME_FORMAT_STR)
     class Meta:
         model = Manager
-        exclude = ("employer_id",)
+        fields = ("expiration_date", "username", "mobile")
 
 
 class WorkShiftPlanListSerializer(serializers.ListSerializer):

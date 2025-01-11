@@ -6,6 +6,22 @@ from django.db.models import ExpressionWrapper, Sum, DurationField, F
 from django.http import HttpResponse
 
 
+POST_METHOD_STR = "POST"
+# GET_METHOD_STR = "GET"
+PUT_METHOD_STR = "PUT"
+DELETE_METHOD_STR = "DELETE"
+DATE_FORMAT_STR = "%Y-%m-%d"
+TIME_FORMAT_STR = "%H:%M"
+DATE_TIME_FORMAT_STR = "%Y-%m-%d %H:%M"
+
+ADD_PERMISSION_STR = "add"
+CHANGE_PERMISSION_STR = "change"
+DELETE_PERMISSION_STR = "delete"
+VIEW_PERMISSION_STR = "view"
+
+REPORT_PERMISSION_STR = "report"
+
+
 def get_random_int_code(digits=4):
     a = pow(10, digits - 1)
     b = pow(10, digits)

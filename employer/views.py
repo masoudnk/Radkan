@@ -5,13 +5,15 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.utils.timezone import now
+from jdatetime import datetime
 from rest_framework import status
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from rest_framework.response import Response
 
 from employer.apps import get_this_app_name
 from employer.serializers import *
-from employer.utilities import national_code_validation, send_response_file
+from employer.utilities import national_code_validation, send_response_file, POST_METHOD_STR, PUT_METHOD_STR, VIEW_PERMISSION_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR, \
+    DELETE_METHOD_STR, DELETE_PERMISSION_STR, DATE_FORMAT_STR, DATE_TIME_FORMAT_STR
 from melipayamak import Api
 
 
@@ -29,22 +31,6 @@ def get_acceptable_permissions(model=Manager, filters=None):
     return perms
 
 
-POST_METHOD_STR = "POST"
-# GET_METHOD_STR = "GET"
-PUT_METHOD_STR = "PUT"
-DELETE_METHOD_STR = "DELETE"
-DATE_FORMAT_STR = "%Y-%m-%d"
-TIME_FORMAT_STR = "%H:%M"
-DATE_TIME_FORMAT_STR = "%Y-%m-%d %H:%M"
-
-ADD_PERMISSION_STR = "add"
-CHANGE_PERMISSION_STR = "change"
-DELETE_PERMISSION_STR = "delete"
-VIEW_PERMISSION_STR = "view"
-
-REPORT_PERMISSION_STR = "report"
-
-
 @api_view([POST_METHOD_STR, PUT_METHOD_STR])
 def test(request, **kwargs):
     is_valid, msg = national_code_validation(request.data.get("national_code"))
@@ -55,6 +41,7 @@ def check_user_permission(action, model):
     def decorator(function):
         def wrapper(request, *args, **kwargs):
             print("request.user:", request.user.id)
+            # print("start o decorator:", request, args, kwargs)
             kwargs.update(request.data.copy())
             try:
                 employer = Employer.objects.get(id=request.user.id, is_active=True)
@@ -79,7 +66,7 @@ def check_user_permission(action, model):
                     perms = perm
                 if not request.user.has_perms(perms):
                     raise PermissionDenied
-
+            # print(request, args, kwargs)
             result = function(request, *args, **kwargs)
             return result
 
@@ -321,7 +308,7 @@ def get_workplaces_excel(request, **kwargs):
     data = [["نام", "شهر", "آدرس", "محیط", "latitude", "longitude"]]
     for fin in workplaces_list:
         data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude])
-    return send_response_file(data,'workplaces')
+    return send_response_file(data, 'workplaces')
 
 
 @api_view()
@@ -330,7 +317,7 @@ def search_workplaces(request, **kwargs):
     name = request.GET.get('name')
     city = request.GET.get('city')
     employer = Employer.objects.get(id=kwargs["employer"])
-    result=employer.workplace_set
+    result = employer.workplace_set
     if name and city:
         result = result.filter(name__icontains=name, city__icontains=city)
     elif name:
@@ -879,9 +866,11 @@ def get_work_shift_plans_list(request, oid, **kwargs):
 @api_view([POST_METHOD_STR])
 @check_user_permission(ADD_PERMISSION_STR, Manager)
 def create_manager(request, **kwargs):
-    cpy_data = request.data.copy()
-    cpy_data["employer_id"] = kwargs["employer"]
-    ser = ManagerSerializer(data=cpy_data)
+    exp = datetime.strptime(request.data['expiration_date'], DATE_TIME_FORMAT_STR)
+    if exp < now():
+        return Response({"expiration_date": "تاریخ انقضای مسئولیت منقضی شده است"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+    kwargs["employer_id"] = kwargs["employer"]
+    ser = RegisterManagerSerializer(data=kwargs)
     if ser.is_valid():
         e = ser.save()
         perms = get_acceptable_permissions(filters=request.data.get("permissions")).values_list("id", flat=True)
@@ -893,6 +882,10 @@ def create_manager(request, **kwargs):
 @api_view([POST_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, Manager)
 def update_manager(request, oid, **kwargs):
+    exp = datetime.strptime(request.data['expiration_date'], DATE_TIME_FORMAT_STR)
+    if exp < now():
+        return Response({"expiration_date": "تاریخ انقضای مسئولیت منقضی شده است"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+
     mg = get_object_or_404(Manager, employer_id=kwargs["employer"], id=oid)
     ser = ManagerOutputSerializer(instance=mg, data=request.data, partial=True)
     if ser.is_valid():
