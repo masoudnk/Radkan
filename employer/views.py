@@ -643,6 +643,12 @@ def manage_and_create_employee_request(cpy_data):
             plan = None
         if plan is None:
             return Response({"date": "تاریخ جزو شیفت نیست"})
+
+        if plan.first_period_start<cpy_data['time']<plan.first_period_end:
+            pass
+        else:
+            if plan.second_period_start and plan.second_period_start<cpy_data['time']<plan.second_period_end:
+                pass
         # todo continue and evaluate and make constraints
 
         ser = EmployeeRequestManualTrafficSerializer(data=cpy_data)

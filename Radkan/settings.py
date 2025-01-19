@@ -45,10 +45,27 @@ INSTALLED_APPS = [
     'django.contrib.humanize',
     'rest_framework',
     'rest_framework_simplejwt',
+    'corsheaders',
 
     'employer',
     'mptt',
 ]
+
+CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOWED_ORIGINS = [
+#     'http://example.com',
+#     'http://anotherdomain.com',
+# ]
+CORS_ALLOW_METHODS = [
+  "DELETE",
+  "GET",
+  "OPTIONS",
+  # "PATCH",
+  "POST",
+  "PUT",
+]
+
+
 AUTH_USER_MODEL = 'employer.User'
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
@@ -59,6 +76,7 @@ REST_FRAMEWORK = {
     )
 }
 SIMPLE_JWT = {
+    # todo set these
     # 'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     # 'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
     # 'SLIDING_TOKEN_LIFETIME': timedelta(days=30),
@@ -105,6 +123,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'employer.get_request.RequestMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'Radkan.urls'
