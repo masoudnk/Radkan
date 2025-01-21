@@ -177,7 +177,7 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
 class EmployerProfileOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employer
-        fields = EmployerProfileUpdateSerializer.Meta.fields+(
+        fields = EmployerProfileUpdateSerializer.Meta.fields + (
             "username",
             "mobile",
         )
@@ -301,7 +301,7 @@ class WorkPolicySerializer(serializers.ModelSerializer):
 class WorkPolicyOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkPolicy
-        exclude = ("employer",)
+        fields = ("name", "description",)
 
 
 class EarnedLeavePolicySerializer(serializers.ModelSerializer):
@@ -737,3 +737,45 @@ class EmployeeRequestShiftChangeSerializer(EmployeeRequestDailyEarnedLeaveSerial
         fields = EmployeeRequestDailyEarnedLeaveSerializer.Meta.fields + (
             "other_employee",
         )
+
+
+class WorkPolicyFullDetailsOutputSerializer(serializers.ModelSerializer):
+    earnedleavepolicy = EarnedLeavePolicyOutputSerializer()
+    sickleavepolicy = SickLeavePolicyOutputSerializer()
+    overtimepolicy = OvertimePolicyOutputSerializer()
+    manualtrafficpolicy = ManualTrafficPolicyOutputSerializer()
+    workmissionpolicy = WorkMissionPolicyOutputSerializer()
+
+    class Meta:
+        model = WorkPolicy
+        exclude = ("employer",)
+
+
+class EarnedLeavePolicyUpdateSerializer(EarnedLeavePolicySerializer):
+    class Meta:
+        model = EarnedLeavePolicy
+        exclude = ("employer", "work_policy")
+
+
+class SickLeavePolicyUpdateSerializer(SickLeavePolicySerializer):
+    class Meta:
+        model = SickLeavePolicy
+        exclude = ("employer", "work_policy")
+
+
+class OvertimePolicyUpdateSerializer(OvertimePolicySerializer):
+    class Meta:
+        model = OvertimePolicy
+        exclude = ("employer", "work_policy")
+
+
+class ManualTrafficPolicyUpdateSerializer(ManualTrafficPolicySerializer):
+    class Meta:
+        model = ManualTrafficPolicy
+        exclude = ("employer", "work_policy")
+
+
+class WorkMissionPolicyUpdateSerializer(WorkMissionPolicySerializer):
+    class Meta:
+        model = WorkMissionPolicy
+        exclude = ("employer", "work_policy")

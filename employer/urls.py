@@ -93,4 +93,12 @@ urlpatterns = [
     path('create_work_mission_policy/', policy_views.create_work_mission_policy, name='create_work_mission_policy'),
     path('delete_work_policy/<int:oid>/', policy_views.delete_work_policy, name='delete_work_policy'),
 
+    path('get_work_policy/<int:oid>/', policy_views.get_work_policy, name='get_work_policy'),
+    path('update_work_policy/<int:oid>/', policy_views.update_work_policy, name='update_work_policy'),
+    path('update_earned_leave_policy/<int:wp_id>/', policy_views.update_earned_leave_policy, name='update_earned_leave_policy'),
+    path('update_sick_leave_policy/<int:wp_id>/', policy_views.update_sick_leave_policy, name='update_sick_leave_policy'),
+    path('update_overtime_policy/<int:wp_id>/', policy_views.update_overtime_policy, name='update_overtime_policy'),
+    path('update_manual_traffic_policy/<int:wp_id>/', policy_views.update_manual_traffic_policy, name='update_manual_traffic_policy'),
+    path('update_work_mission_policy/<int:wp_id>/', policy_views.update_work_mission_policy, name='update_work_mission_policy'),
+
 ]
