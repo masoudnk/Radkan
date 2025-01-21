@@ -155,20 +155,32 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
             "phone",
             "postal_code",
             "address",
-            "referrer",
+            # fixme handle adding referrer
+            #  "referrer",
             "company_name",
             "legal_entity_type",
             "company_registration_date",
             "company_registration_number",
             "branch_name",
             "economical_code",
+            "is_male",
+
+            "email_login_successful",
+            "email_login_failed",
+            "email_change_password",
+            "email_employee_login",
+            "email_employee_logout",
+
         )
 
 
 class EmployerProfileOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employer
-        fields = EmployerProfileUpdateSerializer.Meta.fields
+        fields = EmployerProfileUpdateSerializer.Meta.fields+(
+            "username",
+            "mobile",
+        )
 
 
 class WorkplaceListSerializer(serializers.ListSerializer):

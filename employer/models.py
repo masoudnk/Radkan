@@ -510,7 +510,7 @@ class TicketConversation(models.Model):
 class RollCall(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
     date = jmodels.jDateField()
-    arrival = models.TimeField(auto_now_add=True)
+    arrival = models.TimeField()
     departure = models.TimeField(null=True, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی', null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی', null=True, blank=True)

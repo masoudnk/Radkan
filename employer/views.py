@@ -5,7 +5,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.utils.timezone import now
-from jdatetime import datetime
+from jdatetime import datetime, date
 from rest_framework import status
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from rest_framework.response import Response
@@ -640,41 +640,116 @@ def manage_and_create_employee_request(cpy_data):
         try:
             plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
         except WorkShiftPlan.DoesNotExist:
-            plan = None
-        if plan is None:
             return Response({"date": "تاریخ جزو شیفت نیست"})
-
-        if plan.first_period_start<cpy_data['time']<plan.first_period_end:
-            pass
-        else:
-            if plan.second_period_start and plan.second_period_start<cpy_data['time']<plan.second_period_end:
-                pass
-        # todo continue and evaluate and make constraints
-
+        if plan.permitted_traffic_start and plan.permitted_traffic_start > cpy_data['time']:
+            return Response({"permitted_traffic_start": "قبل از بازه ثبت تردد"})
+        if plan.permitted_traffic_end and plan.permitted_traffic_end < cpy_data['time']:
+            return Response({"permitted_traffic_start": "بعد از بازه ثبت تردد"})
         ser = EmployeeRequestManualTrafficSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE:
+        try:
+            plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
+        except WorkShiftPlan.DoesNotExist:
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
         ser = EmployeeRequestHourlyEarnedLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE:
+        start_date = date(*[int(d) for d in cpy_data['date'].split("-")])
+        end_date = date(*[int(d) for d in cpy_data['end_date'].split("-")])
+        delta = timedelta(days=1)
+        dates = []
+        while start_date <= end_date:
+            dates.append(start_date.isoformat())
+            start_date += delta
+        plans = WorkShiftPlan.objects.filter(date__in=dates)
+        if plans.count() != len(dates):
+            return Response({"date": "تاریخ جزو شیفت نیست"})
         ser = EmployeeRequestDailyEarnedLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_MISSION:
+        try:
+            plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
+        except WorkShiftPlan.DoesNotExist:
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
         ser = EmployeeRequestHourlyMissionSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_MISSION:
+        start_date = date(*[int(d) for d in cpy_data['date'].split("-")])
+        end_date = date(*[int(d) for d in cpy_data['end_date'].split("-")])
+        delta = timedelta(days=1)
+        dates = []
+        while start_date <= end_date:
+            dates.append(start_date.isoformat())
+            start_date += delta
+        plans = WorkShiftPlan.objects.filter(date__in=dates)
+        if plans.count() != len(dates):
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+
         ser = EmployeeRequestDailyMissionSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_OVERTIME:
+        try:
+            plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
+        except WorkShiftPlan.DoesNotExist:
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+        if (plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+                (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+            return Response({"date": "ساعت جزو ساعات شیفت است"})
         ser = EmployeeRequestOvertimeSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE:
+        try:
+            plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
+        except WorkShiftPlan.DoesNotExist:
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+
         ser = EmployeeRequestHourlySickLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE:
+        start_date = date(*[int(d) for d in cpy_data['date'].split("-")])
+        end_date = date(*[int(d) for d in cpy_data['end_date'].split("-")])
+        delta = timedelta(days=1)
+        dates = []
+        while start_date <= end_date:
+            dates.append(start_date.isoformat())
+            start_date += delta
+        plans = WorkShiftPlan.objects.filter(date__in=dates)
+        if plans.count() != len(dates):
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+
         ser = EmployeeRequestDailySickLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE:
+        try:
+            plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
+        except WorkShiftPlan.DoesNotExist:
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+
         ser = EmployeeRequestHourlyUnpaidLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE:
+        start_date = date(*[int(d) for d in cpy_data['date'].split("-")])
+        end_date = date(*[int(d) for d in cpy_data['end_date'].split("-")])
+        delta = timedelta(days=1)
+        dates = []
+        while start_date <= end_date:
+            dates.append(start_date.isoformat())
+            start_date += delta
+        plans = WorkShiftPlan.objects.filter(date__in=dates)
+        if plans.count() != len(dates):
+            return Response({"date": "تاریخ جزو شیفت نیست"})
+
         ser = EmployeeRequestDailyUnpaidLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_PROJECT_MANUAL_TRAFFIC:
+        get_object_or_404(Project, id=cpy_data['project'], employer_id=cpy_data['employer'])
         ser = EmployeeRequestProjectManualTrafficSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_SHIFT_ROTATION:
+        # todo control both employees have shifts and remember to load this plans in their reports
         ser = EmployeeRequestShiftChangeSerializer(data=cpy_data)
-
     else:
         return Response({"msg": "category unaccepted"}, status=status.HTTP_400_BAD_REQUEST)
     if ser.is_valid():
