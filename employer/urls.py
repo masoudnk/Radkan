@@ -77,7 +77,7 @@ urlpatterns = [
     # -----------------------------------report_views-----------------------------
     path('report_employees_function/', report_views.report_employees_function, name='report_employees_function'),
     path('get_employer_dashboard/', report_views.get_employer_dashboard, name='get_employer_dashboard'),
-    path('get_employee_report/', report_views.get_employee_report, name='get_employee_report'),
+    path('get_employee_report/<int:oid>/', report_views.get_employee_report, name='get_employee_report'),
     path('get_employees_function_report_excel/', report_views.get_employees_function_report_excel, name='get_employees_function_report_excel'),
     path('report_employee_traffic/', report_views.report_employee_traffic, name='report_employee_traffic'),
     path('get_employee_traffic_report_excel/', report_views.get_employee_traffic_report_excel, name='get_employee_traffic_report_excel'),

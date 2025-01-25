@@ -1,4 +1,5 @@
 import random
+import re
 
 import pandas as pd
 from django.core.exceptions import ValidationError
@@ -7,7 +8,7 @@ from django.http import HttpResponse
 
 
 POST_METHOD_STR = "POST"
-# GET_METHOD_STR = "GET"
+GET_METHOD_STR = "GET"
 PUT_METHOD_STR = "PUT"
 DELETE_METHOD_STR = "DELETE"
 DATE_FORMAT_STR = "%Y-%m-%d"
@@ -120,3 +121,13 @@ def send_response_file(data, file_name, file_format='excel'):
         response = HttpResponse("Unsupported format", status=400)
 
     return response
+
+def mobile_validator(phone_number:str):
+    if not phone_number.isdecimal():
+        raise ValidationError("phone number must be a decimal number")
+    if len(phone_number)<10:
+        raise ValidationError("phone number must be at least 10 digits")
+    pattern = "^(?:(?:(?:\\+?|00)(98))|(0))?((?:90|91|92|93|99)[0-9]{8})$"
+    if not re.match(pattern, phone_number):
+        raise ValidationError("شماره موبایل نادرست است.")
+

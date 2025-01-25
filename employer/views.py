@@ -3,6 +3,7 @@ from datetime import timedelta
 import openpyxl
 from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, get_list_or_404
 from django.utils.timezone import now
 from jdatetime import datetime, date
@@ -11,9 +12,10 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.response import Response
 
 from employer.apps import get_this_app_name
+from employer.populate import populate_roll_call, populate_shift_plans
 from employer.serializers import *
 from employer.utilities import national_code_validation, send_response_file, POST_METHOD_STR, PUT_METHOD_STR, VIEW_PERMISSION_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR, \
-    DELETE_METHOD_STR, DELETE_PERMISSION_STR, DATE_FORMAT_STR, DATE_TIME_FORMAT_STR
+    DELETE_METHOD_STR, DELETE_PERMISSION_STR, DATE_FORMAT_STR, DATE_TIME_FORMAT_STR, GET_METHOD_STR
 from melipayamak import Api
 
 
@@ -33,8 +35,9 @@ def get_acceptable_permissions(model=Manager, filters=None):
 
 @api_view([POST_METHOD_STR, PUT_METHOD_STR])
 def test(request, **kwargs):
-    is_valid, msg = national_code_validation(request.data.get("national_code"))
-    return Response({"is_valid": is_valid, "msg": msg}, status=status.HTTP_200_OK)
+    # populate_roll_call(14)
+    populate_shift_plans(request)
+    return HttpResponse({"is_valid": 1, "msg": 1}, status=status.HTTP_200_OK)
 
 
 def check_user_permission(action, model):
@@ -42,7 +45,10 @@ def check_user_permission(action, model):
         def wrapper(request, *args, **kwargs):
             print("request.user:", request.user.id)
             # print("start o decorator:", request, args, kwargs)
-            kwargs.update(request.data.copy())
+            if isinstance(request.data, dict):
+                kwargs.update(request.data.copy())
+            if request.method==GET_METHOD_STR:
+                kwargs.update(request.query_params.copy())
             try:
                 employer = Employer.objects.get(id=request.user.id, is_active=True)
                 kwargs["employer"] = employer.id
@@ -87,7 +93,9 @@ def send_sms():
     response = sms.send(to, _from, text)
 
 
-def handle_single_or_list_objects(data, user_id, serializer):
+def handle_single_or_list_objects(data, user_id, serializer, context=None):
+    if context is None:
+        context = {}
     is_many = False
     if isinstance(data, list):
         is_many = True
@@ -95,7 +103,7 @@ def handle_single_or_list_objects(data, user_id, serializer):
             item["employer"] = user_id
     else:
         data["employer"] = user_id
-    return serializer(data=data, many=is_many), is_many
+    return serializer(data=data, many=is_many,context=context), is_many
 
 
 @api_view()
@@ -867,12 +875,12 @@ def get_employees_requests_list(request, **kwargs):
 @api_view([POST_METHOD_STR])
 @check_user_permission(ADD_PERMISSION_STR, WorkShift)
 def create_work_shift(request, **kwargs):
+    print(kwargs)
     ser = WorkShiftSerializer(data=kwargs)
     if ser.is_valid():
         e = ser.save()
         return Response(WorkShiftOutputSerializer(e).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, WorkShift)
@@ -881,7 +889,7 @@ def search_work_shift(request, **kwargs):
     if name is None:
         return Response({'error': '"name" is required'}, status=status.HTTP_400_BAD_REQUEST)
     employer = Employer.objects.get(id=kwargs["employer"])
-    result = employer.workshift_set.objects.filter(name__icontains=name)
+    result = employer.workshift_set.filter(name__icontains=name)
     ser = WorkShiftOutputSerializer(result, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -948,7 +956,7 @@ def get_work_shift_plan_choices(request, **kwargs):
 @check_user_permission(ADD_PERMISSION_STR, WorkShift)
 def create_work_shift_plan(request, **kwargs):
     # ser, is_many = handle_single_or_list_objects(request.data, kwargs["employer"], WorkShiftPlanSerializer)
-    ser, is_many = handle_single_or_list_objects(request.data, kwargs["employer"], WorkShiftPlanUpdateSerializer)
+    ser, is_many = handle_single_or_list_objects(request.data, kwargs["employer"], WorkShiftPlanUpdateSerializer,{'request':request})
     if ser.is_valid():
         e = ser.save()
         return Response(WorkShiftPlanOutputSerializer(e, many=is_many).data, status=status.HTTP_201_CREATED)

@@ -562,7 +562,7 @@ class WorkShiftPlanSerializer(serializers.ModelSerializer):
 
 class WorkShiftPlanUpdateSerializer(serializers.ModelSerializer):
     modifier = serializers.HiddenField(default=serializers.CurrentUserDefault())
-    id = serializers.IntegerField()
+    id = serializers.IntegerField(allow_null=True, required=False)
 
     class Meta:
         model = WorkShiftPlan

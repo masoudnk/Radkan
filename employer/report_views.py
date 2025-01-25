@@ -35,12 +35,13 @@ def create_employee_report(employee):
     earned = {}
     sick = {}
     unpaid = {}
+    # todo add date in [start, end] filter parameter
+    roll_calls = RollCall.objects.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), employee_id=employee.id, )
+    employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
 
-    # fixme what shall we do for incomplete roll_calls ?
-    roll_calls = RollCall.objects.filter(employee_id=employee.id, departure__isnull=False)
-    employee_requests = employee.employeerequest_set.filter(action=EmployeeRequest.STATUS_APPROVED)
     hourly_missions = employee_requests.filter(category=EmployeeRequest.CATEGORY_HOURLY_MISSION)
     daily_missions = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_MISSION)
+
     hourly_earned_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE)
     daily_earned_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE)
 
@@ -56,8 +57,10 @@ def create_employee_report(employee):
     plans = employee.work_shift.workshiftplan_set.all()
     for plan in plans:
         date_str = plan.date.strftime(DATE_FORMAT_STR)
-        plan_roll_calls = roll_calls.filter(date=plan.date)
-        # fixme filter requests by dat
+        plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
+        timetable=plan_roll_calls.values_list("arrival","departure",)
+        print(timetable)
+        # fixme filter requests by date
         #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
         todays_e_requests = employee_requests
 
@@ -71,6 +74,16 @@ def create_employee_report(employee):
                     sick[date_str] = calculate_daily_shift_duration(plan)
                 elif req.category == EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE:
                     unpaid[date_str] = calculate_daily_shift_duration(plan)
+                # create final timetable
+                # elif req.category in [ EmployeeRequest.CATEGORY_HOURLY_MISSION,
+                #                        EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
+                #                        EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE,
+                #                        EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE,
+                #                        ]:
+                #     # if req.time < final_roll_call.arrival:
+                #     #     final_roll_call.arrival = req.time
+                #     # if req.to_time > final_roll_call.departure:
+                #     #     final_roll_call.departure = req.to_time
 
         if plan_roll_calls.exists():
             total_minutes = calculate_query_duration(plan_roll_calls)
@@ -108,6 +121,7 @@ def create_employee_report(employee):
                                     this_late_arrival -= this_late_departure
                                     this_late_departure = 0
 
+                    # --------------------------------------------------------------------------------
                     if this_early_arrival > 0:
                         if plan.beginning_overtime is not None and plan.beginning_overtime > 0:
                             b = min(this_early_arrival, plan.beginning_overtime)
@@ -158,7 +172,7 @@ def create_employee_report(employee):
                 return Response({"msg": "WorkShiftPlan PLAN_TYPE is not acceptable"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
     return {
-        "total_attend": total_minute_to_hour_and_minutes(calculate_query_duration(roll_calls)),
+        "total_attend": total_minute_to_hour_and_minutes(calculate_query_duration(roll_calls)[2]),
         "total_absent": sum(absent.values()),
         "total_overtime": sum(overtime.values()),
         "total_burned_out": sum(burned_out.values()),
@@ -208,8 +222,8 @@ def get_employees_function_report_excel(request):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employee_report(request):
-    employee = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
+def get_employee_report(request,oid,**kwargs):
+    employee = get_object_or_404(Employee, id=oid, employer_id=kwargs["employer"])
     report = create_employee_report(employee)
     return Response(report, status=status.HTTP_200_OK)
 
@@ -290,7 +304,3 @@ def filter_project_traffic(request):
 def report_project_traffic(request):
     report = filter_employee_and_lives(request)
     return Response(report, status=status.HTTP_200_OK)
-
-
-
-

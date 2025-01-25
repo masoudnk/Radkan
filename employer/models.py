@@ -10,7 +10,7 @@ from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
 from phonenumber_field.modelfields import PhoneNumberField
 
-from employer.utilities import get_random_int_code, national_code_validation
+from employer.utilities import get_random_int_code, national_code_validation, mobile_validator
 
 
 class LegalEntityType(models.Model):
@@ -63,7 +63,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(max_length=255, verbose_name='نام کاربری', )
     mobile = PhoneNumberField(
         unique=True,
-        verbose_name='شماره همراه')
+        verbose_name='شماره همراه',
+    validators=[mobile_validator])
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
@@ -177,8 +178,8 @@ class Workplace(models.Model):
     city = models.CharField(max_length=250)
     address = models.TextField(null=True, blank=True, )
     radius = models.PositiveSmallIntegerField(default=50, verbose_name="شعاع(متر)")
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
+    latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی')
+    longitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='طول جغرافیایی')
 
 
 class RTSP(models.Model):
@@ -325,6 +326,8 @@ class WorkShiftPlan(models.Model):
     first_period_end = models.TimeField(null=True, blank=True)
     second_period_start = models.TimeField(null=True, blank=True)
     second_period_end = models.TimeField(null=True, blank=True)
+    # optional field
+    modifier = models.ForeignKey(User, on_delete=models.PROTECT,related_name="modifier")
     # fixme this uniqueness will create "AttributeError: 'list' object has no attribute 'pk'" error on serializer
     # class Meta:
     #     unique_together=("work_shift", "date")
@@ -416,8 +419,8 @@ class EmployeeRequest(models.Model):
     # from_time = models.TimeField(null=True, blank=True)
     manual_traffic_type = models.PositiveSmallIntegerField(choices=TRAFFIC_CHOICES, null=True, blank=True)
     to_time = models.TimeField(null=True, blank=True)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی', null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی', null=True, blank=True)
+    latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی', null=True, blank=True)
+    longitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='طول جغرافیایی', null=True, blank=True)
     attachment = models.FileField(upload_to=get_file_path, max_length=200, null=True, blank=True)
     project = models.ForeignKey("Project", on_delete=models.PROTECT, null=True, blank=True)
     other_employee = models.ForeignKey("Employee", related_name="other_employee", on_delete=models.PROTECT, null=True, blank=True)
@@ -474,8 +477,8 @@ class RadkanMessageViewInfo(models.Model):
 #     parent = models.ForeignKey(Province, on_delete=models.CASCADE, verbose_name='استان')
 #     name = models.CharField(max_length=255, verbose_name='نام')
 #
-#     # latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی')
-#     # longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی')
+#     # latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی')
+#     # longitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='طول جغرافیایی')
 #
 #     class Meta:
 #         verbose_name = 'شهر'
@@ -508,9 +511,11 @@ class TicketConversation(models.Model):
 
 
 class RollCall(models.Model):
+    FLAG_ARRIVAL = 1
+    FLAG_DEPARTURE = 2
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
     date = jmodels.jDateField()
-    arrival = models.TimeField()
+    arrival = models.TimeField(null=True, blank=True)
     departure = models.TimeField(null=True, blank=True)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='عرض جغرافیایی', null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, verbose_name='طول جغرافیایی', null=True, blank=True)
+    latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی', null=True, blank=True)
+    longitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='طول جغرافیایی', null=True, blank=True)
