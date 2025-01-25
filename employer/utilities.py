@@ -6,7 +6,6 @@ from django.core.exceptions import ValidationError
 from django.db.models import ExpressionWrapper, Sum, DurationField, F
 from django.http import HttpResponse
 
-
 POST_METHOD_STR = "POST"
 GET_METHOD_STR = "GET"
 PUT_METHOD_STR = "PUT"
@@ -122,12 +121,13 @@ def send_response_file(data, file_name, file_format='excel'):
 
     return response
 
-def mobile_validator(phone_number:str):
+
+def mobile_validator(phone_number: str):
+    phone_number = phone_number.replace("+", "00")
     if not phone_number.isdecimal():
         raise ValidationError("phone number must be a decimal number")
-    if len(phone_number)<10:
+    if len(phone_number) < 10:
         raise ValidationError("phone number must be at least 10 digits")
     pattern = "^(?:(?:(?:\\+?|00)(98))|(0))?((?:90|91|92|93|99)[0-9]{8})$"
     if not re.match(pattern, phone_number):
         raise ValidationError("شماره موبایل نادرست است.")
-
