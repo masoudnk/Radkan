@@ -13,7 +13,7 @@ from employer.views import DATE_FORMAT_STR, check_user_permission, VIEW_PERMISSI
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employer_dashboard(request):
+def get_employer_dashboard(request, **kwargs):
     shifts = WorkShiftPlan.objects.filter(date=now()).values_list("work_shift", flat=True)
     employees = Employee.objects.filter(work_shift__in=shifts).distinct()
     # todo write aggregations for these queries
@@ -204,14 +204,14 @@ def filter_employees_and_their_requests(request):  # a view request
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_employees_function(request):
+def report_employees_function(request, **kwargs):
     result = filter_employees_and_their_requests(request)
     return Response(result, status=status.HTTP_200_OK)
 
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employees_function_report_excel(request):
+def get_employees_function_report_excel(request, **kwargs):
     # fixme this is placebo...
     #  workplaces_list = filter_employees_and_their_requests(request)
     workplaces_list = Workplace.objects.all()
@@ -231,7 +231,7 @@ def get_employee_report(request, oid, **kwargs):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_personnel_leave(request):
+def report_personnel_leave(request, **kwargs):
     # todo filter to month and year
     employees = Employee.objects.filter(employer_id=request.user.id)
     for employee in employees:
@@ -251,7 +251,7 @@ def report_personnel_leave(request):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_employee_traffic(request):
+def report_employee_traffic(request, **kwargs):
     emp = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
     report = create_employee_report(emp)
     return Response(report, status=status.HTTP_200_OK)
@@ -259,7 +259,7 @@ def report_employee_traffic(request):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employee_traffic_report_excel(request):
+def get_employee_traffic_report_excel(request, **kwargs):
     # fixme this is placebo...
     #  workplaces_list = filter_employees_and_their_requests(request)
     workplaces_list = Workplace.objects.all()
@@ -277,14 +277,14 @@ def filter_employee_and_lives(request):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_employee_leave(request):
+def report_employee_leave(request, **kwargs):
     report = filter_employee_and_lives(request)
     return Response(report, status=status.HTTP_200_OK)
 
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employee_leave_report_excel(request):
+def get_employee_leave_report_excel(request, **kwargs):
     # fixme this is placebo...
     #  workplaces_list = filter_employee_and_lives(request)(request)
     workplaces_list = Workplace.objects.all()
@@ -302,6 +302,6 @@ def filter_project_traffic(request):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_project_traffic(request):
+def report_project_traffic(request, **kwargs):
     report = filter_employee_and_lives(request)
     return Response(report, status=status.HTTP_200_OK)

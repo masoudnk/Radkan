@@ -10,7 +10,7 @@ from .utilities import PUT_METHOD_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR
 
 @api_view([POST_METHOD_STR])
 @check_user_permission(ADD_PERMISSION_STR, WorkPolicy)
-def create_work_policy(request):
+def create_work_policy(request, **kwargs):
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     ser = WorkPolicySerializer(data=cpy_data)
@@ -22,7 +22,7 @@ def create_work_policy(request):
 
 @api_view([DELETE_METHOD_STR])
 @check_user_permission(DELETE_PERMISSION_STR, WorkPolicy)
-def delete_work_policy(request, oid):
+def delete_work_policy(request, oid, **kwargs):
     o = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
@@ -47,7 +47,7 @@ def get_leave_policy_choices(request, **kwargs):
     }, status=status.HTTP_200_OK)
 
 @api_view()
-def get_work_policy(request, oid):
+def get_work_policy(request, oid, **kwargs):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=oid)
     ser = WorkPolicyFullDetailsOutputSerializer(instance=wp)
     return Response(ser.data, status=status.HTTP_200_OK)
@@ -55,7 +55,7 @@ def get_work_policy(request, oid):
 
 @api_view([PUT_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, EarnedLeavePolicy)
-def update_earned_leave_policy(request, wp_id):
+def update_earned_leave_policy(request, wp_id, **kwargs):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=wp_id)
     ser = EarnedLeavePolicyUpdateSerializer(data=request.data, instance=wp.earnedleavepolicy, partial=True)
     if ser.is_valid(raise_exception=True):
@@ -66,7 +66,7 @@ def update_earned_leave_policy(request, wp_id):
 
 @api_view([PUT_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, SickLeavePolicy)
-def update_sick_leave_policy(request, wp_id):
+def update_sick_leave_policy(request, wp_id, **kwargs):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=wp_id)
     ser = SickLeavePolicyUpdateSerializer(data=request.data, instance=wp.sickleavepolicy, partial=True)
     if ser.is_valid(raise_exception=True):
@@ -77,7 +77,7 @@ def update_sick_leave_policy(request, wp_id):
 
 @api_view([PUT_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, OvertimePolicy)
-def update_overtime_policy(request, wp_id):
+def update_overtime_policy(request, wp_id, **kwargs):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=wp_id)
     ser = OvertimePolicyUpdateSerializer(data=request.data, instance=wp.overtimepolicy, partial=True)
     if ser.is_valid(raise_exception=True):
@@ -88,7 +88,7 @@ def update_overtime_policy(request, wp_id):
 
 @api_view([PUT_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, ManualTrafficPolicy)
-def update_manual_traffic_policy(request, wp_id):
+def update_manual_traffic_policy(request, wp_id, **kwargs):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=wp_id)
     ser = ManualTrafficPolicyUpdateSerializer(data=request.data, instance=wp.manualtrafficpolicy, partial=True)
     if ser.is_valid(raise_exception=True):
@@ -99,7 +99,7 @@ def update_manual_traffic_policy(request, wp_id):
 
 @api_view([PUT_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, WorkMissionPolicy)
-def update_work_mission_policy(request, wp_id):
+def update_work_mission_policy(request, wp_id, **kwargs):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=wp_id)
     ser = WorkMissionPolicyUpdateSerializer(data=request.data, instance=wp.workmissionpolicy, partial=True)
     if ser.is_valid(raise_exception=True):
@@ -109,7 +109,7 @@ def update_work_mission_policy(request, wp_id):
 
 
 @api_view([POST_METHOD_STR])
-def create_earned_leave_policy(request):
+def create_earned_leave_policy(request, **kwargs):
     wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
@@ -122,7 +122,7 @@ def create_earned_leave_policy(request):
 
 
 @api_view([POST_METHOD_STR])
-def create_sick_leave_policy(request):
+def create_sick_leave_policy(request, **kwargs):
     wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
@@ -135,7 +135,7 @@ def create_sick_leave_policy(request):
 
 
 @api_view([POST_METHOD_STR])
-def create_overtime_policy(request):
+def create_overtime_policy(request, **kwargs):
     wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
@@ -148,7 +148,7 @@ def create_overtime_policy(request):
 
 
 @api_view([POST_METHOD_STR])
-def create_manual_traffic_policy(request):
+def create_manual_traffic_policy(request, **kwargs):
     wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
@@ -161,7 +161,7 @@ def create_manual_traffic_policy(request):
 
 
 @api_view([POST_METHOD_STR])
-def create_work_mission_policy(request):
+def create_work_mission_policy(request, **kwargs):
     wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
