@@ -25,8 +25,10 @@ def get_file_path(instance, filename, ):
         main_folder = 'TicketAttachments/'
     elif isinstance(instance, Employer):
         main_folder = 'EmployerImage/'
+    elif isinstance(instance, Employee):
+        main_folder = 'EmployeeImage/'
     else:
-        raise Exception("unhandled model type")
+        raise Exception("unhandled model type used get_file_path() method")
     return os.path.join(main_folder + subfolder, filename)
 
 
@@ -64,7 +66,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     mobile = PhoneNumberField(
         unique=True,
         verbose_name='شماره همراه',
-    validators=[mobile_validator])
+        validators=[mobile_validator])
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
@@ -136,6 +138,7 @@ class Employer(User):
     email_change_password = models.BooleanField(default=True)
     email_employee_login = models.BooleanField(default=False)
     email_employee_logout = models.BooleanField(default=False)
+    email_employee_request_registered = models.BooleanField(default=False)
 
     def __str__(self):
         return self.username
@@ -161,15 +164,15 @@ class AttendanceDeviceBrand(models.Model):
     name = models.CharField(max_length=250)
 
 
-class AttendanceDevice(models.Model):
-    STATUS_CHOICES = {
-        True: 'آنلاین',
-        False: 'آفلاین',
-    }
-    port = models.PositiveSmallIntegerField(default=4730)
-    brand = models.ForeignKey(AttendanceDeviceBrand, on_delete=models.PROTECT)
-    ip_address = models.GenericIPAddressField()
-    is_online = models.BooleanField(null=True, blank=True, default=True, choices=STATUS_CHOICES, verbose_name='وضعیت دستگاه')
+# class AttendanceDevice(models.Model):
+#     STATUS_CHOICES = {
+#         True: 'آنلاین',
+#         False: 'آفلاین',
+#     }
+#     port = models.PositiveSmallIntegerField(default=4730)
+#     brand = models.ForeignKey(AttendanceDeviceBrand, on_delete=models.PROTECT)
+#     ip_address = models.GenericIPAddressField()
+#     is_online = models.BooleanField(null=True, blank=True, default=True, choices=STATUS_CHOICES, verbose_name='وضعیت دستگاه')
 
 
 class Workplace(models.Model):
@@ -262,6 +265,8 @@ class EarnedLeavePolicy(LeavePolicy):
     year = models.PositiveSmallIntegerField()
     maximum_earned_leave_for_next_year_hour = models.PositiveSmallIntegerField(help_text="hour")
     maximum_earned_leave_for_next_year_minutes = models.PositiveSmallIntegerField(help_text="minutes", validators=[MaxValueValidator(59)])
+    bypass_annual_limit = models.BooleanField(default=True)
+    bypass_monthly_limit = models.BooleanField(default=True)
 
     class Meta:
         permissions = [("update", "update EarnedLeavePolicy")]
@@ -282,6 +287,7 @@ class Holiday(models.Model):
 
     def __str__(self):
         return self.name
+
     class Meta:
         unique_together = (("employer", "date"),)
 
@@ -327,7 +333,7 @@ class WorkShiftPlan(models.Model):
     second_period_start = models.TimeField(null=True, blank=True)
     second_period_end = models.TimeField(null=True, blank=True)
     # optional field
-    modifier = models.ForeignKey(User, on_delete=models.PROTECT,related_name="modifier")
+    modifier = models.ForeignKey(User, on_delete=models.PROTECT, related_name="modifier")
     # fixme this uniqueness will create "AttributeError: 'list' object has no attribute 'pk'" error on serializer
     # class Meta:
     #     unique_together=("work_shift", "date")

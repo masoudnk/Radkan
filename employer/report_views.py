@@ -23,7 +23,8 @@ def get_employer_dashboard(request):
 
     attendees_ser = AttendeesSerializer(attendees, many=True)
     absentees_ser = AbsenteesSerializer(absentees, many=True)
-    return Response({"attendees": attendees_ser.data, "absentees": absentees_ser.data, }, status=status.HTTP_200_OK)
+    return Response({"attendees": attendees_ser.data, "absentees": absentees_ser.data, "attendees_count": attendees.count(), "absentees_count": absentees.count(),
+                     "total_employees_count": employees.count()}, status=status.HTTP_200_OK)
 
 
 def create_employee_report(employee):
@@ -58,7 +59,7 @@ def create_employee_report(employee):
     for plan in plans:
         date_str = plan.date.strftime(DATE_FORMAT_STR)
         plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
-        timetable=plan_roll_calls.values_list("arrival","departure",)
+        timetable = plan_roll_calls.values_list("arrival", "departure", )
         print(timetable)
         # fixme filter requests by date
         #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
@@ -222,7 +223,7 @@ def get_employees_function_report_excel(request):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employee_report(request,oid,**kwargs):
+def get_employee_report(request, oid, **kwargs):
     employee = get_object_or_404(Employee, id=oid, employer_id=kwargs["employer"])
     report = create_employee_report(employee)
     return Response(report, status=status.HTTP_200_OK)

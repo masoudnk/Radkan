@@ -41,6 +41,12 @@ def update_work_policy(request, oid, **kwargs):
 
 
 @api_view()
+def get_leave_policy_choices(request, **kwargs):
+    return Response({
+        "ACCEPTABLE_REGISTRATION_TYPE_CHOICES": LeavePolicy.ACCEPTABLE_REGISTRATION_TYPE_CHOICES,
+    }, status=status.HTTP_200_OK)
+
+@api_view()
 def get_work_policy(request, oid):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=oid)
     ser = WorkPolicyFullDetailsOutputSerializer(instance=wp)

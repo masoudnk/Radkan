@@ -1,6 +1,7 @@
 import django.contrib.auth.password_validation as validators
 from django.contrib.auth.hashers import make_password
 from django.core import exceptions
+from django_jalali.serializers.serializerfield import JDateField
 from rest_framework import serializers
 
 from .models import *
@@ -208,6 +209,8 @@ class WorkplaceSerializer(serializers.ModelSerializer):
 
 
 class HolidaySerializer(serializers.ModelSerializer):
+    date = JDateField()
+
     class Meta:
         model = Holiday
         exclude = ()
@@ -498,6 +501,20 @@ class WorkShiftSerializer(serializers.ModelSerializer):
 class WorkShiftOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkShift
+        exclude = ("employer",)
+
+
+class RTSPSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RTSP
+        exclude = ()
+
+
+class RTSPOutputSerializer(serializers.ModelSerializer):
+    workplace = WorkplaceOutputSerializer(read_only=True)
+
+    class Meta:
+        model = RTSP
         exclude = ("employer",)
 
 
