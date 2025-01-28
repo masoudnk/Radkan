@@ -12,7 +12,6 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.response import Response
 
 from employer.apps import get_this_app_name
-from employer.populate import populate_shift_plans
 from employer.serializers import *
 from employer.utilities import send_response_file, POST_METHOD_STR, PUT_METHOD_STR, VIEW_PERMISSION_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR, \
     DELETE_METHOD_STR, DELETE_PERMISSION_STR, DATE_FORMAT_STR, DATE_TIME_FORMAT_STR, GET_METHOD_STR
@@ -36,8 +35,8 @@ def get_acceptable_permissions(model=Manager, filters=None):
 @api_view([POST_METHOD_STR, PUT_METHOD_STR])
 def test(request, **kwargs):
     # populate_roll_call(14)
-    populate_shift_plans(request)
-    return HttpResponse({"is_valid": 1, "msg": 1}, status=status.HTTP_200_OK)
+    # populate_shift_plans(request)
+    return HttpResponse(send_sms(), status=status.HTTP_200_OK)
 
 
 def check_user_permission(action, model):
@@ -83,14 +82,16 @@ def check_user_permission(action, model):
 
 def send_sms():
     # todo get melli payamak info
-    username = 'username'
-    password = 'password'
+    username = '9059420544'
+    password = '9c7ea7e6-576f-4d8d-8663-ee046d73f204'
     api = Api(username, password)
     sms = api.sms()
-    to = '09123456789'
-    _from = '5000...'
+    to = '09381860107'
+    _from = '50002710020544'
     text = 'تست وب سرویس ملی پیامک'
     response = sms.send(to, _from, text)
+    print(response)
+    return response
 
 
 def handle_single_or_list_objects(data, user_id, serializer, context=None):
@@ -651,6 +652,7 @@ def update_ticket_status(request, oid):
 
 
 def manage_and_create_employee_request(cpy_data):
+    # todo raise error if selected date or time has roll_call
     category = int(cpy_data["category"])
     if category == EmployeeRequest.CATEGORY_MANUAL_TRAFFIC:
         try:
@@ -833,31 +835,30 @@ def update_employee_request_status(request, oid, **kwargs):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def employee_requests_filter(kwargs, query=None):
-    from_date = kwargs.get('from_date')
-    to_date = kwargs.get('to_date')
-    category = kwargs.get('category')
-    employee = kwargs.get('employee_id', False)
+def employee_requests_filter(request, result):
+    from_date = request.GET.get('from_date', False)
+    to_date = request.GET.get('to_date', False)
+    category = request.GET.get('category', False)
+    employee = request.GET.get('employee_id', False)
     if not from_date and not to_date and not category:
         return Response({"msg": "invalid parameter"}, status=status.HTTP_400_BAD_REQUEST)
-    result = query if query else EmployeeRequest.objects.filter(employee__employer_id=kwargs["employer"])
     if from_date:
-        result = result.filter(start_date__gte=from_date)
+        result = result.filter(date__gte=from_date)
     if to_date:
         result = result.filter(end_date__lte=to_date)
     if category:
         result = result.filter(category=category)
     if employee:
         result = result.filter(employee_id=employee)
-    if kwargs.get("status", False):
-        result = result.filter(status=kwargs["status"])
+    if request.GET.get("status", False):
+        result = result.filter(status=request.GET.get("status"))
     return result
 
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, EmployeeRequest)
 def search_employee_requests(request, **kwargs):
-    result = employee_requests_filter(kwargs)
+    result = employee_requests_filter(request, EmployeeRequest.objects.filter(employee__employer_id=kwargs["employer"]))
     ser = EmployeeRequestOutputSerializer(result, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -865,7 +866,7 @@ def search_employee_requests(request, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, EmployeeRequest)
 def get_employee_requests_excel(request, **kwargs):
-    data_list = employee_requests_filter(kwargs)
+    data_list = employee_requests_filter(request, EmployeeRequest.objects.filter(employee__employer_id=kwargs["employer"]))
     data = [["نوع", "پرسنل", "تاریخ شروع", "تاریخ پایان", "تاریخ ثبت", ]]
     for fin in data_list:
         data.append([fin.category.name, fin.employee.get_full_name(), fin.start_date.strftime(DATE_FORMAT_STR), fin.end_date.strftime(DATE_FORMAT_STR),
@@ -878,7 +879,7 @@ def get_employee_requests_excel(request, **kwargs):
 def get_employees_requests_list(request, **kwargs):
     # employees = Employee.objects.filter(employer_id=kwargs["employer"])
     # requests_list = EmployeeRequest.objects.filter(employee_id__in=employees)
-    requests_list = employee_requests_filter(kwargs)
+    requests_list = employee_requests_filter(request, EmployeeRequest.objects.filter(employee__employer_id=kwargs["employer"]))
     ser = EmployeeRequestOutputSerializer(requests_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
@@ -948,7 +949,6 @@ def get_employer_choices(request, **kwargs):
 #     return Response({
 #         "STATUS_CHOICES": AttendanceDevice.STATUS_CHOICES,
 #     }, status=status.HTTP_200_OK)
-
 
 
 @api_view()
@@ -1047,6 +1047,7 @@ def delete_manager(request, oid, **kwargs):
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
 
+
 # ----------------------------------------------------------------#}
 
 @api_view([POST_METHOD_STR])
@@ -1091,5 +1092,3 @@ def delete_rtsp(request, oid, **kwargs):
     o = get_object_or_404(RTSP, employer_id=kwargs["employer"], id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
-
-

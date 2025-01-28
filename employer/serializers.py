@@ -23,7 +23,13 @@ class TicketSectionSerializer(serializers.ModelSerializer):
 class TicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ticket
-        exclude = ()
+        fields = (
+            "user",
+            "title",
+            "section",
+            "description",
+            "attachment",
+        )
 
 
 class TicketConversationSerializer(serializers.ModelSerializer):
@@ -38,8 +44,8 @@ class TicketListOutputSerializer(serializers.ModelSerializer):
 
     def get_last_update(self, obj):
         if obj.ticketconversation_set.exists():
-            return obj.ticketconversation_set.last().date_time
-        return obj.date_time
+            return obj.ticketconversation_set.last().date_time.strftime(DATE_TIME_FORMAT_STR)
+        return obj.date_time.strftime(DATE_TIME_FORMAT_STR)
 
     class Meta:
         model = Ticket
@@ -594,11 +600,12 @@ class WorkShiftPlanOutputSerializer(serializers.ModelSerializer):
 
 
 class AbsenteesSerializer(serializers.ModelSerializer):
-    full_name = serializers.CharField(source="get_full_name")
+    full_name = serializers.CharField(source="employee.get_full_name")
+    personnel_code = serializers.CharField(source="employee.personnel_code")
 
     class Meta:
-        model = Employee
-        exclude = ("personnel_code", "full_name")
+        model = RollCall
+        fields = ("personnel_code", "full_name")
 
 
 class AttendeesSerializer(serializers.ModelSerializer):

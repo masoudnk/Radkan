@@ -3,7 +3,7 @@ import re
 
 import pandas as pd
 from django.core.exceptions import ValidationError
-from django.db.models import ExpressionWrapper, Sum, DurationField, F
+from django.db.models import ExpressionWrapper, Sum, DurationField, F, Q
 from django.http import HttpResponse
 
 POST_METHOD_STR = "POST"
@@ -44,10 +44,25 @@ def subtract_times(start, end):
 
 def calculate_daily_shift_duration(plan):
     first_duration = subtract_times(plan.first_period_start, plan.first_period_end)
-    this_absent = first_duration
+    this_duration = first_duration
     if plan.second_period_start is not None and plan.second_period_end is not None:
-        this_absent += subtract_times(plan.second_period_start, plan.second_period_end)
-    return this_absent
+        this_duration += subtract_times(plan.second_period_start, plan.second_period_end)
+    return this_duration
+
+
+def calculate_daily_request_duration(employee_requests, plans):
+    total_duration = 0
+    for emp in employee_requests:
+        this_plans = plans.filter(Q(date__gte=emp.date) | Q(date__lte=emp.to_date))
+        total_duration += calculate_query_duration(this_plans)
+    return total_duration
+
+
+def calculate_hourly_request_duration(employee_requests):
+    total_duration = 0
+    for employee_request in employee_requests:
+        total_duration += subtract_times(employee_request.time, employee_request.to_time)
+    return total_duration
 
 
 def calculate_query_duration(q):
@@ -131,3 +146,9 @@ def mobile_validator(phone_number: str):
     pattern = "^(?:(?:(?:\\+?|00)(98))|(0))?((?:90|91|92|93|99)[0-9]{8})$"
     if not re.match(pattern, phone_number):
         raise ValidationError("شماره موبایل نادرست است.")
+
+
+class DailyStatus:
+    attend = overtime = absent = early_arrival = late_arrival = early_departure = late_departure = 0
+    date = None
+    burned_out={}

@@ -57,6 +57,7 @@ class CustomUserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    # fixme password wont hash if inserted from simple-admins
     # email = models.EmailField(
     #     verbose_name='email address',
     #     max_length=255,
@@ -350,12 +351,12 @@ class Employee(User):
     work_shift = models.ForeignKey(WorkShift, on_delete=models.PROTECT)
     shift_start_date = jmodels.jDateField()
     shift_end_date = jmodels.jDateField()
-    front_image = models.ImageField(upload_to=get_file_path, max_length=100)
-    up_image = models.ImageField(upload_to=get_file_path, max_length=100)
-    down_image = models.ImageField(upload_to=get_file_path, max_length=100)
-    left_image = models.ImageField(upload_to=get_file_path, max_length=100)
-    right_image = models.ImageField(upload_to=get_file_path, max_length=100)
-    front_second_image = models.ImageField(upload_to=get_file_path, max_length=100)
+    front_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
+    up_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
+    down_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
+    left_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
+    right_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
+    front_second_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
 
     def get_full_name(self):
         return self.first_name + " " + self.last_name
