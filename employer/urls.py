@@ -19,6 +19,7 @@ urlpatterns = [
     path('update_employer_info/', views.update_employer_info, name='update_employer_info'),
     path('get_employer_choices/', views.get_employer_choices, name='get_employer_choices'),
     path('get_legal_entity_types_list/', views.get_legal_entity_types_list, name='get_legal_entity_types_list'),
+    path('get_employer_messages_list/', views.get_employer_messages_list, name='get_employer_messages_list'),
 
     # -----------------------------workplace-----------------------------------#}
     path('create_work_place/', views.create_work_place, name='create_work_place'),
