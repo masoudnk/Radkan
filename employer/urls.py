@@ -47,7 +47,7 @@ urlpatterns = [
 
     # -----------------------------category-----------------------------------#}
     path('update_work_category/<int:oid>/', views.update_work_category, name='update_work_category'),
-    path('get_work_category/', views.get_work_category, name='get_work_category'),
+    path('get_work_category/<int:oid>/', views.get_work_category, name='get_work_category'),
     path('delete_work_category/<int:oid>/', views.delete_work_category, name='delete_work_category'),
     path('get_work_categories_list/', views.get_work_categories_list, name='get_work_categories_list'),
     path('create_work_category/', views.create_work_category, name='create_work_category'),

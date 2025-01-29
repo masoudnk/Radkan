@@ -1,6 +1,7 @@
 import random
 import re
 
+import jdatetime
 import pandas as pd
 from django.core.exceptions import ValidationError
 from django.db.models import ExpressionWrapper, Sum, DurationField, F, Q
@@ -48,6 +49,10 @@ def calculate_daily_shift_duration(plan):
     if plan.second_period_start is not None and plan.second_period_end is not None:
         this_duration += subtract_times(plan.second_period_start, plan.second_period_end)
     return this_duration
+
+
+def str_to_time(string):
+    return jdatetime.datetime.strptime(string, TIME_FORMAT_STR).time()
 
 
 def calculate_daily_request_duration(employee_requests, plans):
@@ -152,4 +157,4 @@ def mobile_validator(phone_number: str):
 class DailyStatus:
     attend = overtime = absent = early_arrival = late_arrival = early_departure = late_departure = 0
     date = None
-    burned_out={}
+    burned_out = {}

@@ -15,7 +15,7 @@ from employer.apps import get_this_app_name
 from employer.populate import populate_roll_call, populate_shift_plans
 from employer.serializers import *
 from employer.utilities import send_response_file, POST_METHOD_STR, PUT_METHOD_STR, VIEW_PERMISSION_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR, \
-    DELETE_METHOD_STR, DELETE_PERMISSION_STR, DATE_FORMAT_STR, DATE_TIME_FORMAT_STR, GET_METHOD_STR
+    DELETE_METHOD_STR, DELETE_PERMISSION_STR, DATE_FORMAT_STR, DATE_TIME_FORMAT_STR, GET_METHOD_STR, str_to_time
 from melipayamak import Api
 
 
@@ -38,7 +38,7 @@ def test(request, key, **kwargs):
     if key == "roll_call":
         populate_roll_call(14)
     elif key == "plan":
-        populate_shift_plans(request,request.GET.get("work_shift_id",1))
+        populate_shift_plans(request, request.GET.get("work_shift_id", 1))
     elif key == "sms":
         send_sms()
     else:
@@ -585,7 +585,7 @@ def create_radkan_message(request, **kwargs):
 @check_user_permission(VIEW_PERMISSION_STR, RadkanMessage)
 def get_radkan_messages_list(request, **kwargs):
     radkan_messages_list = get_list_or_404(RadkanMessage, employer_id=kwargs["employer"])
-    ser = ProjectOutputSerializer(radkan_messages_list, many=True)
+    ser = RadkanMessageOutputSerializer(radkan_messages_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
@@ -666,10 +666,10 @@ def manage_and_create_employee_request(cpy_data):
             plan = WorkShiftPlan.objects.get(date=cpy_data['date'])
         except WorkShiftPlan.DoesNotExist:
             return Response({"date": "تاریخ جزو شیفت نیست"})
-        if plan.permitted_traffic_start and plan.permitted_traffic_start > cpy_data['time']:
+        if plan.permitted_traffic_start and plan.permitted_traffic_start > str_to_time(cpy_data['time']):
             return Response({"permitted_traffic_start": "قبل از بازه ثبت تردد"})
-        if plan.permitted_traffic_end and plan.permitted_traffic_end < cpy_data['time']:
-            return Response({"permitted_traffic_start": "بعد از بازه ثبت تردد"})
+        if plan.permitted_traffic_end and plan.permitted_traffic_end < str_to_time(cpy_data['time']):
+            return Response({"permitted_traffic_end": "بعد از بازه ثبت تردد"})
         ser = EmployeeRequestManualTrafficSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE:
         try:
@@ -847,7 +847,8 @@ def employee_requests_filter(request, result):
     to_date = request.GET.get('to_date', False)
     category = request.GET.get('category', False)
     employee = request.GET.get('employee_id', False)
-    if not from_date and not to_date and not category:
+    # if not from_date and not to_date and not category:
+    if not from_date and not to_date:
         return Response({"msg": "invalid parameter"}, status=status.HTTP_400_BAD_REQUEST)
     if from_date:
         result = result.filter(date__gte=from_date)
@@ -989,8 +990,8 @@ def update_work_shift_plan(request, **kwargs):
     cpy_data = request.data.copy()
     for item in cpy_data:
         item["employer"] = kwargs["employer"]
-    work_shift_plans = get_list_or_404(WorkShiftPlan, employer_id=kwargs["employer"], work_shift_id=cpy_data[0]["work_shift"])
-    ser = WorkShiftPlanUpdateSerializer(data=cpy_data, instance=work_shift_plans, many=True,context={'request': request})
+    work_shift_plans = get_list_or_404(WorkShiftPlan, employer_id=kwargs["employer"], work_shift_id=cpy_data["work_shift"])
+    ser = WorkShiftPlanUpdateSerializer(data=cpy_data, instance=work_shift_plans, many=True, context={'request': request})
     if ser.is_valid():
         e = ser.save()
         return Response(WorkShiftPlanOutputSerializer(e, many=True).data, status=status.HTTP_200_OK)

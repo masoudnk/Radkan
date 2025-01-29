@@ -55,7 +55,7 @@ def get_work_policy(request, oid, **kwargs):
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, WorkPolicy)
-def get_work_policies_list(request, oid, **kwargs):
+def get_work_policies_list(request,  **kwargs):
     wp = WorkPolicy.objects.filter(employer_id=kwargs['employer'])
     ser = WorkPolicyFullDetailsOutputSerializer(instance=wp,many=True)
     return Response(ser.data, status=status.HTTP_200_OK)

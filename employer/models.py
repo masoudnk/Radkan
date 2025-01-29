@@ -142,6 +142,9 @@ class Employer(User):
     email_employee_login = models.BooleanField(default=False)
     email_employee_logout = models.BooleanField(default=False)
     email_employee_request_registered = models.BooleanField(default=False)
+    province = models.CharField(max_length=250,null=True, blank=True)
+    city = models.CharField(max_length=250,null=True, blank=True)
+    district = models.CharField(max_length=250,null=True, blank=True)
 
     def __str__(self):
         return self.username

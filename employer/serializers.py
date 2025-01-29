@@ -149,6 +149,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
 
 class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
+    birth_date = JDateField()
 
     def validate(self, data):
         errors = dict()
@@ -179,6 +180,9 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
             "branch_name",
             "economical_code",
             "is_male",
+            "province",
+            "city",
+            "district",
 
             "email_login_successful",
             "email_login_failed",
@@ -242,12 +246,6 @@ class ProjectSerializer(serializers.ModelSerializer):
         exclude = ()
 
 
-class ProjectOutputSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Project
-        exclude = ("employer",)
-
-
 class HolidayOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = Holiday
@@ -270,19 +268,6 @@ class RadkanMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = RadkanMessage
         exclude = ()
-
-
-class RadkanMessageOutputSerializer(serializers.ModelSerializer):
-    seen_contacts = serializers.SerializerMethodField("get_seen_contacts")
-
-    def get_seen_contacts(self, obj):
-        views = obj.radkanmessageviewinfo_set.all().count()
-        all_employees = obj.employees.all().count()
-        return "{}({})".format(all_employees, views)
-
-    class Meta:
-        model = RadkanMessage
-        exclude = ("employer",)
 
 
 class RollCallSerializer(serializers.ModelSerializer):
@@ -478,14 +463,14 @@ class EmployeeRequestSerializer(serializers.ModelSerializer):
 
 
 class EmployeeRequestOutputSerializer(serializers.ModelSerializer):
-    category_display = serializers.CharField(source='get_category_display')
-    action_display = serializers.CharField(source='get_action_display')
+    category = serializers.CharField(source='get_category_display')
+    status = serializers.CharField(source='get_status_display')
     manual_traffic_type_display = serializers.CharField(source='get_manual_traffic_type_display')
 
     class Meta:
         model = EmployeeRequest
         exclude = ("employer",)
-        read_only_fields = ('category_display',)
+        read_only_fields = ('category',)
 
 
 class EmployeeRequestCategoryOutputSerializer(serializers.ModelSerializer):
@@ -806,10 +791,30 @@ class EmployeeOutputSerializer(serializers.ModelSerializer):
     work_shift = WorkShiftOutputSerializer(read_only=True)
     shift_start_date = JDateField(read_only=True)
     shift_end_date = JDateField(read_only=True)
+    workplace = WorkplaceOutputSerializer(read_only=True, many=True)
 
     class Meta:
         model = Employee
-        exclude = ("employer_id", "password")
+        fields = (
+            "id",
+            "work_policy",
+            "work_shift",
+            "shift_start_date",
+            "shift_end_date",
+            "workplace",
+            "username",
+            "mobile",
+            "first_name",
+            "last_name",
+            "national_code",
+            "personnel_code",
+            "front_image",
+            "up_image",
+            "down_image",
+            "left_image",
+            "right_image",
+            "front_second_image",
+        )
 
 
 class EmployeeShortOutputSerializer(serializers.ModelSerializer):
@@ -825,3 +830,32 @@ class WorkCategoryOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkCategory
         fields = ("id", "parent", "name", "employee", "parent_name")
+
+
+class WorkCategoryShortOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkCategory
+        fields = ("id", "parent", "name",)
+
+
+class ProjectOutputSerializer(serializers.ModelSerializer):
+    employees = EmployeeShortOutputSerializer(read_only=True, many=True)
+
+    class Meta:
+        model = Project
+        exclude = ("employer",)
+
+
+class RadkanMessageOutputSerializer(serializers.ModelSerializer):
+    seen_contacts = serializers.SerializerMethodField("get_seen_contacts")
+    work_category = WorkCategoryShortOutputSerializer(read_only=True)
+    employees = EmployeeShortOutputSerializer(read_only=True, many=True)
+
+    def get_seen_contacts(self, obj):
+        views = obj.radkanmessageviewinfo_set.all().count()
+        all_employees = obj.employees.all().count()
+        return "{}({})".format(all_employees, views)
+
+    class Meta:
+        model = RadkanMessage
+        exclude = ("employer",)
