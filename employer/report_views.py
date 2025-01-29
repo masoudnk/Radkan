@@ -8,12 +8,12 @@ from rest_framework.response import Response
 from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest, Workplace
 from employer.serializers import AttendeesSerializer, AbsenteesSerializer
 from employer.utilities import subtract_times, calculate_roll_call_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes, send_response_file, \
-    REPORT_PERMISSION_STR, calculate_hourly_request_duration, calculate_daily_request_duration, DailyStatus
+    REPORT_PERMISSION_STR, calculate_hourly_request_duration, calculate_daily_request_duration, DailyStatus, DASHBOARD_PERMISSION_STR
 from employer.views import DATE_FORMAT_STR, check_user_permission, VIEW_PERMISSION_STR
 
 
 @api_view()
-@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
+@check_user_permission(VIEW_PERMISSION_STR, DASHBOARD_PERMISSION_STR)
 def get_employer_dashboard(request, **kwargs):
     shifts = WorkShiftPlan.objects.filter(date=now()).values_list("work_shift", flat=True)
     employees = Employee.objects.filter(work_shift__in=shifts).distinct()

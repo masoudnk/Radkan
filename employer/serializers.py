@@ -546,7 +546,7 @@ class ManagerOutputSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Manager
-        fields = ("expiration_date", "username", "mobile")
+        fields = ("id","expiration_date", "username", "mobile")
 
 
 class WorkShiftPlanListSerializer(serializers.ListSerializer):

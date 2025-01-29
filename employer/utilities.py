@@ -21,6 +21,7 @@ DELETE_PERMISSION_STR = "delete"
 VIEW_PERMISSION_STR = "view"
 
 REPORT_PERMISSION_STR = "report"
+DASHBOARD_PERMISSION_STR = "dashboard"
 
 
 def get_random_int_code(digits=4):

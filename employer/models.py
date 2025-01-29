@@ -105,6 +105,9 @@ class ResetPasswordRequest(models.Model):
 class Manager(User):
     employer_id = models.PositiveIntegerField()
     expiration_date = jmodels.jDateTimeField()
+    class Meta:
+        permissions = (("view_dashboard", "Can view dashboard"),)
+
 
 
 class Employer(User):
@@ -306,8 +309,7 @@ class WorkShift(models.Model):
     year = models.PositiveSmallIntegerField()
 
     class Meta:
-        permissions = (
-            ("view_report", "Can view report"),)
+        permissions = (("view_report", "Can view report"),)
 
 
 class WorkShiftPlan(models.Model):

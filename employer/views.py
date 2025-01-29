@@ -5,7 +5,8 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import ProtectedError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, get_list_or_404
-from django.utils.timezone import now
+from django.utils import timezone
+from django.utils.timezone import now, make_aware
 from jdatetime import datetime, date
 from rest_framework import status
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
@@ -1009,8 +1010,8 @@ def get_work_shift_plans_list(request, oid, **kwargs):
 @api_view([POST_METHOD_STR])
 @check_user_permission(ADD_PERMISSION_STR, Manager)
 def create_manager(request, **kwargs):
-    exp = datetime.strptime(request.data['expiration_date'], DATE_TIME_FORMAT_STR)
-    if exp < now():
+    exp = make_aware(datetime.strptime(request.data['expiration_date'], DATE_TIME_FORMAT_STR))
+    if exp < timezone.now():
         return Response({"expiration_date": "تاریخ انقضای مسئولیت منقضی شده است"}, status=status.HTTP_406_NOT_ACCEPTABLE)
     kwargs["employer_id"] = kwargs["employer"]
     ser = RegisterManagerSerializer(data=kwargs)
