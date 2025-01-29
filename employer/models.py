@@ -142,9 +142,9 @@ class Employer(User):
     email_employee_login = models.BooleanField(default=False)
     email_employee_logout = models.BooleanField(default=False)
     email_employee_request_registered = models.BooleanField(default=False)
-    province = models.CharField(max_length=250,null=True, blank=True)
-    city = models.CharField(max_length=250,null=True, blank=True)
-    district = models.CharField(max_length=250,null=True, blank=True)
+    province = models.CharField(max_length=250, null=True, blank=True)
+    city = models.CharField(max_length=250, null=True, blank=True)
+    district = models.CharField(max_length=250, null=True, blank=True)
 
     def __str__(self):
         return self.username
@@ -274,8 +274,8 @@ class EarnedLeavePolicy(LeavePolicy):
     bypass_annual_limit = models.BooleanField(default=True)
     bypass_monthly_limit = models.BooleanField(default=True)
 
-    class Meta:
-        permissions = [("update", "update EarnedLeavePolicy")]
+    # class Meta:
+    #     permissions = [("update", "update EarnedLeavePolicy")]
 
 
 class SickLeavePolicy(LeavePolicy):
@@ -352,7 +352,7 @@ class Employee(User):
     national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی", validators=[national_code_validation])
     personnel_code = models.CharField(max_length=250)
     workplace = models.ManyToManyField(Workplace)
-    work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT,null=True, blank=True)
+    work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT, null=True, blank=True)
     work_shift = models.ForeignKey(WorkShift, on_delete=models.PROTECT)
     shift_start_date = jmodels.jDateField()
     shift_end_date = jmodels.jDateField(null=True, blank=True)
@@ -438,7 +438,6 @@ class EmployeeRequest(models.Model):
     other_employee = models.ForeignKey("Employee", related_name="other_employee", on_delete=models.PROTECT, null=True, blank=True)
 
 
-
 class Project(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
@@ -462,6 +461,13 @@ class RadkanMessage(models.Model):
     description = models.TextField()
     work_category = models.ForeignKey(WorkCategory, on_delete=models.PROTECT)
     employees = models.ManyToManyField(Employee)
+    date = jmodels.jDateField(auto_now_add=True)
+
+
+class EmployerMessage(models.Model):
+    employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
+    title = models.CharField(max_length=250)
+    description = models.TextField()
     date = jmodels.jDateField(auto_now_add=True)
 
 

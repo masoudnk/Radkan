@@ -258,6 +258,13 @@ class WorkplaceOutputSerializer(serializers.ModelSerializer):
         exclude = ("employer",)
 
 
+
+class EmployerMessageOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployerMessage
+        exclude = ("employer",)
+
+
 class EmployeeDashboardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee

@@ -1107,3 +1107,11 @@ def delete_rtsp(request, oid, **kwargs):
     o = get_object_or_404(RTSP, employer_id=kwargs["employer"], id=oid)
     o.delete()
     return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+
+
+@api_view()
+def get_employer_messages_list(request, **kwargs):
+    msgs_list = EmployerMessage.objects.filter(employer_id=request.user.id)
+    ser = EmployerMessageOutputSerializer(msgs_list, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
