@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from employer.views import POST_METHOD_STR, DELETE_METHOD_STR, check_user_permission
 from .serializers import *
-from .utilities import PUT_METHOD_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR, DELETE_PERMISSION_STR
+from .utilities import PUT_METHOD_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR, DELETE_PERMISSION_STR, VIEW_PERMISSION_STR
 
 
 @api_view([POST_METHOD_STR])
@@ -50,6 +50,14 @@ def get_leave_policy_choices(request, **kwargs):
 def get_work_policy(request, oid, **kwargs):
     wp = get_object_or_404(WorkPolicy, employer_id=request.user.id, id=oid)
     ser = WorkPolicyFullDetailsOutputSerializer(instance=wp)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, WorkPolicy)
+def get_work_policies_list(request, oid, **kwargs):
+    wp = WorkPolicy.objects.filter(employer_id=kwargs['employer'])
+    ser = WorkPolicyFullDetailsOutputSerializer(instance=wp,many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 

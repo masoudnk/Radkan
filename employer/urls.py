@@ -89,6 +89,7 @@ urlpatterns = [
 
     # ---------------------------project-------------------------------------#}
     path('get_projects_list/', views.get_projects_list, name='get_projects_list'),
+    path('create_project/', views.create_project, name='create_project'),
     path('update_project/<int:oid>/', views.update_project, name='update_project'),
     path('get_project/<int:oid>/', views.get_project, name='get_project'),
     path('delete_project/<int:oid>/', views.delete_project, name='delete_project'),
@@ -126,6 +127,7 @@ urlpatterns = [
     path('get_employee_leave_report_excel/', report_views.get_employee_leave_report_excel, name='get_employee_leave_report_excel'),
 
     # -------------------------------policy_views---------------------------------
+    path('get_work_policies_list/', policy_views.get_work_policies_list, name='get_work_policies_list'),
     path('get_leave_policy_choices/', policy_views.get_leave_policy_choices, name='get_leave_policy_choices'),
     path('create_work_policy/', policy_views.create_work_policy, name='create_work_policy'),
     path('create_earned_leave_policy/', policy_views.create_earned_leave_policy, name='create_earned_leave_policy'),

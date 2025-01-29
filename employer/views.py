@@ -518,7 +518,7 @@ def get_work_category(request, oid, **kwargs):
 @check_user_permission(VIEW_PERMISSION_STR, WorkCategory)
 def get_work_categories_list(request, **kwargs):
     work_categories_list = get_list_or_404(WorkCategory, employer_id=kwargs["employer"])
-    ser = HolidayOutputSerializer(work_categories_list, many=True)
+    ser = WorkCategoryOutputSerializer(work_categories_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
 
 

@@ -74,6 +74,7 @@ class ResetPasswordRequestSerializer(serializers.ModelSerializer):
         model = ResetPasswordRequest
         exclude = ()
 
+
 class LegalEntityTypeOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = LegalEntityType
@@ -107,6 +108,8 @@ class RegisterEmployerSerializer(serializers.ModelSerializer):
 
 class EmployeeSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    shift_start_date = JDateField()
+    shift_end_date = JDateField()
 
     # employer_id  = serializers.HiddenField(default=serializers.CurrentUserDefault().id)
 
@@ -233,12 +236,6 @@ class WorkCategorySerializer(serializers.ModelSerializer):
         exclude = ()
 
 
-class WorkCategoryOutputSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = WorkCategory
-        exclude = ("employer",)
-
-
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
@@ -261,12 +258,6 @@ class WorkplaceOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = Workplace
         exclude = ("employer",)
-
-
-class EmployeeOutputSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Employee
-        exclude = ("employer_id", "password")
 
 
 class EmployeeDashboardSerializer(serializers.ModelSerializer):
@@ -808,3 +799,29 @@ class WorkMissionPolicyUpdateSerializer(WorkMissionPolicySerializer):
     class Meta:
         model = WorkMissionPolicy
         exclude = ("employer", "work_policy")
+
+
+class EmployeeOutputSerializer(serializers.ModelSerializer):
+    work_policy = WorkPolicyFullDetailsOutputSerializer(read_only=True)
+    work_shift = WorkShiftOutputSerializer(read_only=True)
+    shift_start_date = JDateField(read_only=True)
+    shift_end_date = JDateField(read_only=True)
+
+    class Meta:
+        model = Employee
+        exclude = ("employer_id", "password")
+
+
+class EmployeeShortOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ("id", "username", "mobile", "first_name", "last_name",)
+
+
+class WorkCategoryOutputSerializer(serializers.ModelSerializer):
+    employee = EmployeeShortOutputSerializer(read_only=True, many=True)
+    parent_name = serializers.CharField(source="parent.name", default=None, read_only=True)
+
+    class Meta:
+        model = WorkCategory
+        fields = ("id", "parent", "name", "employee", "parent_name")

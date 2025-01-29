@@ -440,7 +440,7 @@ class Project(models.Model):
     employer = models.ForeignKey(Employer, on_delete=models.PROTECT)
     name = models.CharField(max_length=250)
     status = models.BooleanField()
-    employee = models.ManyToManyField(Employee)
+    employees = models.ManyToManyField(Employee)
 
 
 class WorkCategory(MPTTModel):
