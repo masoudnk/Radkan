@@ -27,6 +27,8 @@ def get_file_path(instance, filename, ):
         main_folder = 'EmployerImage/'
     elif isinstance(instance, Employee):
         main_folder = 'EmployeeImage/'
+    elif isinstance(instance, EmployeeRequest):
+        main_folder = 'SickLeaveRequestFiles/'
     else:
         raise Exception("unhandled model type used get_file_path() method")
     return os.path.join(main_folder + subfolder, filename)
@@ -161,8 +163,8 @@ class MelliSMSInfo(models.Model):
     sms_register_employee_request = models.BooleanField(default=True)
 
 
-class AttendanceDeviceBrand(models.Model):
-    name = models.CharField(max_length=250)
+# class AttendanceDeviceBrand(models.Model):
+#     name = models.CharField(max_length=250)
 
 
 # class AttendanceDevice(models.Model):
@@ -347,10 +349,10 @@ class Employee(User):
     national_code = models.CharField(max_length=250, null=True, blank=True, verbose_name="کد ملی", validators=[national_code_validation])
     personnel_code = models.CharField(max_length=250)
     workplace = models.ManyToManyField(Workplace)
-    work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT)
+    work_policy = models.ForeignKey(WorkPolicy, on_delete=models.PROTECT,null=True, blank=True)
     work_shift = models.ForeignKey(WorkShift, on_delete=models.PROTECT)
     shift_start_date = jmodels.jDateField()
-    shift_end_date = jmodels.jDateField()
+    shift_end_date = jmodels.jDateField(null=True, blank=True)
     front_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
     up_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
     down_image = models.ImageField(upload_to=get_file_path, max_length=100, null=True, blank=True)
@@ -431,6 +433,7 @@ class EmployeeRequest(models.Model):
     attachment = models.FileField(upload_to=get_file_path, max_length=200, null=True, blank=True)
     project = models.ForeignKey("Project", on_delete=models.PROTECT, null=True, blank=True)
     other_employee = models.ForeignKey("Employee", related_name="other_employee", on_delete=models.PROTECT, null=True, blank=True)
+
 
 
 class Project(models.Model):

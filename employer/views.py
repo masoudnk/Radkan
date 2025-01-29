@@ -12,6 +12,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.response import Response
 
 from employer.apps import get_this_app_name
+from employer.populate import populate_roll_call, populate_shift_plans
 from employer.serializers import *
 from employer.utilities import send_response_file, POST_METHOD_STR, PUT_METHOD_STR, VIEW_PERMISSION_STR, CHANGE_PERMISSION_STR, ADD_PERMISSION_STR, \
     DELETE_METHOD_STR, DELETE_PERMISSION_STR, DATE_FORMAT_STR, DATE_TIME_FORMAT_STR, GET_METHOD_STR
@@ -33,10 +34,16 @@ def get_acceptable_permissions(model=Manager, filters=None):
 
 
 @api_view([POST_METHOD_STR, PUT_METHOD_STR])
-def test(request, **kwargs):
-    # populate_roll_call(14)
-    # populate_shift_plans(request)
-    return HttpResponse(send_sms(), status=status.HTTP_200_OK)
+def test(request, key, **kwargs):
+    if key == "roll_call":
+        populate_roll_call(14)
+    elif key == "plan":
+        populate_shift_plans(request,request.GET.get("work_shift_id",1))
+    elif key == "sms":
+        send_sms()
+    else:
+        return HttpResponse("bad", status=status.HTTP_400_BAD_REQUEST)
+    return HttpResponse("ok", status=status.HTTP_200_OK)
 
 
 def check_user_permission(action, model):
@@ -884,6 +891,13 @@ def get_employees_requests_list(request, **kwargs):
     return Response(ser.data, status=status.HTTP_200_OK)
 
 
+@api_view()
+def get_legal_entity_types_list(request, **kwargs):
+    items = LegalEntityType.objects.all()
+    ser = LegalEntityTypeOutputSerializer(items, many=True)
+    return Response(ser.data, status=status.HTTP_200_OK)
+
+
 @api_view([POST_METHOD_STR])
 @check_user_permission(ADD_PERMISSION_STR, WorkShift)
 def create_work_shift(request, **kwargs):
@@ -976,7 +990,7 @@ def update_work_shift_plan(request, **kwargs):
     for item in cpy_data:
         item["employer"] = kwargs["employer"]
     work_shift_plans = get_list_or_404(WorkShiftPlan, employer_id=kwargs["employer"], work_shift_id=cpy_data[0]["work_shift"])
-    ser = WorkShiftPlanUpdateSerializer(data=cpy_data, instance=work_shift_plans, many=True)
+    ser = WorkShiftPlanUpdateSerializer(data=cpy_data, instance=work_shift_plans, many=True,context={'request': request})
     if ser.is_valid():
         e = ser.save()
         return Response(WorkShiftPlanOutputSerializer(e, many=True).data, status=status.HTTP_200_OK)

@@ -52,9 +52,10 @@ def calculate_daily_shift_duration(plan):
 
 def calculate_daily_request_duration(employee_requests, plans):
     total_duration = 0
-    for emp in employee_requests:
-        this_plans = plans.filter(Q(date__gte=emp.date) | Q(date__lte=emp.to_date))
-        total_duration += calculate_query_duration(this_plans)
+    for emp_req in employee_requests:
+        this_plans = plans.filter(Q(date__gte=emp_req.date) | Q(date__lte=emp_req.to_date))
+        for plan in this_plans:
+            total_duration += calculate_daily_shift_duration(plan)
     return total_duration
 
 
@@ -65,7 +66,7 @@ def calculate_hourly_request_duration(employee_requests):
     return total_duration
 
 
-def calculate_query_duration(q):
+def calculate_roll_call_query_duration(q):
     q = q.annotate(duration=ExpressionWrapper(
         F('departure') - F('arrival'), output_field=DurationField()))
     total_time = q.aggregate(total_time=Sum('duration')).get('total_time')

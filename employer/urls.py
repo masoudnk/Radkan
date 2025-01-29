@@ -3,7 +3,7 @@ from django.urls import path
 from employer import views, policy_views, report_views, employee_views
 
 urlpatterns = [
-    path('test/', views.test, name='test'),
+    path('test/<key>/', views.test, name='test'),
 
     # --------------------------password--------------------------------------#}
     path('change_password/', views.change_password, name='password_reset'),
@@ -18,6 +18,7 @@ urlpatterns = [
     path('get_employer_profile/', views.get_employer_profile, name='get_employer_profile'),
     path('update_employer_info/', views.update_employer_info, name='update_employer_info'),
     path('get_employer_choices/', views.get_employer_choices, name='get_employer_choices'),
+    path('get_legal_entity_types_list/', views.get_legal_entity_types_list, name='get_legal_entity_types_list'),
 
     # -----------------------------workplace-----------------------------------#}
     path('create_work_place/', views.create_work_place, name='create_work_place'),

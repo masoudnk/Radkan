@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest, Workplace
 from employer.serializers import AttendeesSerializer, AbsenteesSerializer
-from employer.utilities import subtract_times, calculate_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes, send_response_file, \
+from employer.utilities import subtract_times, calculate_roll_call_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes, send_response_file, \
     REPORT_PERMISSION_STR, calculate_hourly_request_duration, calculate_daily_request_duration, DailyStatus
 from employer.views import DATE_FORMAT_STR, check_user_permission, VIEW_PERMISSION_STR
 
@@ -145,7 +145,13 @@ def one_period_multiple_roll_calls(plan, roll_calls, ):
     stat.absent += (subtract_times(folded_arrival, folded_departure, ) - folded_attend)
     return stat
 def two_period_multiple_roll_calls(plan, roll_calls, ):
+    stat = DailyStatus()
+    stat.date = plan.date
+    stat.attend = calculate_roll_call_query_duration(roll_calls)
     first_period_roll_calls=roll_calls.filter(arrival__lte=plan.first_period_end)
+    if first_period_roll_calls:
+        pass
+
     second_period_roll_calls=roll_calls.exclude(first_period_roll_calls)
 
 
@@ -412,7 +418,7 @@ def create_employee_report(employee: Employee):
                 absent[date_str] = calculate_daily_shift_duration(plan)
         elif plan.plan_type == WorkShiftPlan.FLOATING_PLAN_TYPE:
             if plan_roll_calls.exists():
-                total_minutes = calculate_query_duration(plan_roll_calls)
+                total_minutes = calculate_roll_call_query_duration(plan_roll_calls)
                 attend[date_str] = total_minutes
                 if total_minutes > plan.daily_duty_duration:
                     this_overtime = total_minutes - plan.daily_duty_duration
@@ -427,7 +433,7 @@ def create_employee_report(employee: Employee):
             return Response({"msg": "WorkShiftPlan PLAN_TYPE is not acceptable"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
     result.update({
-        "total_attend": total_minute_to_hour_and_minutes(calculate_query_duration(roll_calls)[2]),
+        "total_attend": total_minute_to_hour_and_minutes(calculate_roll_call_query_duration(roll_calls)[2]),
         "total_absent": sum(absent.values()),
         "total_overtime": sum(overtime.values()),
         "total_burned_out": sum(burned_out.values()),

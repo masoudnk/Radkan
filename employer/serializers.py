@@ -74,6 +74,11 @@ class ResetPasswordRequestSerializer(serializers.ModelSerializer):
         model = ResetPasswordRequest
         exclude = ()
 
+class LegalEntityTypeOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LegalEntityType
+        exclude = ()
+
 
 class RegisterEmployerSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
