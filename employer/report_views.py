@@ -69,9 +69,8 @@ def calculate_arrival_and_departure(arrival, departure, period_start, period_end
 
 def one_period_one_roll_call(plan, arrival, departure, daily_status=None):
     if daily_status is None:
-        daily_status = DailyStatus()
-        daily_status.date = plan.date
-        daily_status.attend = subtract_times(arrival, departure)
+        daily_status = DailyStatus(plan)
+        daily_status.add_attend(subtract_times(arrival, departure))
 
     if arrival > plan.first_period_start:
         daily_status.late_arrival = subtract_times(plan.first_period_start, arrival)
@@ -144,15 +143,69 @@ def one_period_multiple_roll_calls(plan, roll_calls, ):
     stat = one_period_one_roll_call(plan, folded_arrival, folded_departure, stat)
     stat.absent += (subtract_times(folded_arrival, folded_departure, ) - folded_attend)
     return stat
-def two_period_multiple_roll_calls(plan, roll_calls, ):
-    stat = DailyStatus()
-    stat.date = plan.date
-    stat.attend = calculate_roll_call_query_duration(roll_calls)
-    first_period_roll_calls=roll_calls.filter(arrival__lte=plan.first_period_end)
-    if first_period_roll_calls:
-        pass
 
-    second_period_roll_calls=roll_calls.exclude(first_period_roll_calls)
+
+def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
+    stat = DailyStatus(plan)
+    stat.attend = calculate_roll_call_query_duration(roll_calls)
+    first_period_roll_calls = roll_calls.filter(arrival__lte=plan.first_period_end)
+    if first_period_roll_calls:
+        first_period_roll_calls = roll_calls.order_by('arrival')
+        folded_arrival = first_period_roll_calls[0].arrival
+        folded_departure = first_period_roll_calls.last().departure
+        folded_attend = 0
+        for roll_call in first_period_roll_calls:
+            folded_attend += subtract_times(roll_call.arrival, roll_call.departure)
+        stat.absent += (subtract_times(folded_arrival, folded_departure, ) - folded_attend)
+        # stat.early_arrival, stat.late_arrival, stat.early_departure, stat.late_departure = calculate_arrival_and_departure(
+        #     folded_arrival, folded_departure, plan.first_period_start, plan.first_period_end)
+        stat.first_period_arrival_and_departure(*calculate_arrival_and_departure(folded_arrival, folded_departure, plan.first_period_start, plan.first_period_end))
+
+    else:
+        stat.absent += subtract_times(plan.first_period_start, plan.first_period_end)
+
+    second_period_roll_calls = roll_calls.exclude(first_period_roll_calls)
+    if second_period_roll_calls:
+        second_period_roll_calls = second_period_roll_calls.order_by('arrival')
+        folded_arrival = second_period_roll_calls[0].arrival
+        folded_departure = second_period_roll_calls.last().departure
+        folded_attend = 0
+        for roll_call in second_period_roll_calls:
+            folded_attend += subtract_times(roll_call.arrival, roll_call.departure)
+        stat.absent += (subtract_times(folded_arrival, folded_departure, ) - folded_attend)
+        stat.second_period_arrival_and_departure(*calculate_arrival_and_departure(folded_arrival, folded_departure, plan.second_period_start, plan.second_period_end))
+    else:
+        stat.absent += subtract_times(plan.second_period_start, plan.second_period_end)
+
+    # --------------------------------------------------------------------------------
+    if stat.first_period_late_arrival + stat.second_period_late_arrival > 0:
+        if plan.permitted_delay is not None and plan.permitted_delay > 0:
+            if plan.permitted_delay > stat.first_period_late_arrival + stat.second_period_late_arrival:
+                stat.first_period_late_arrival = stat.second_period_late_arrival = 0
+    if stat.first_period_early_departure > 0 and stat.first_period_early_arrival > 0:
+        if plan.permitted_acceleration is not None and plan.permitted_acceleration > 0:
+            if stat.first_period_early_departure < plan.permitted_acceleration:
+                stat.first_period_early_arrival -= stat.first_period_early_departure
+                stat.first_period_early_departure = 0
+    if stat.second_period_early_departure > 0 and stat.second_period_early_arrival > 0:
+        if plan.permitted_acceleration is not None and plan.permitted_acceleration > 0:
+            if stat.second_period_early_departure < plan.permitted_acceleration:
+                stat.second_period_early_arrival -= stat.second_period_early_departure
+                stat.second_period_early_departure = 0
+
+    # if stat.first_period_late_departure >0 and  stat.first_period_late_arrival>0:
+    #         if stat.plan.floating_time is not None and stat.plan.floating_time > 0:
+    #             floating_time = min(stat.plan.floating_time, stat.first_period_late_arrival)
+    #             if stat.first_period_late_departure > floating_time:
+    #                 stat.first_period_late_departure -= floating_time
+    #                 stat.first_period_late_arrival -= floating_time
+    #             else:
+    #                 stat.first_period_late_arrival -= stat.first_period_late_departure
+    #                 stat.first_period_late_departure = 0
+
+    stat.calculate_all_overtimes()
+    stat.add_absent(stat.first_period_late_arrival + stat.second_period_late_arrival + stat.first_period_early_departure + stat.second_period_early_departure)
+    return stat
 
 
 def simple_attend(plan, date_str, plan_roll_calls, burned_out, absent, overtime):

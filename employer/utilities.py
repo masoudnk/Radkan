@@ -7,6 +7,8 @@ from django.core.exceptions import ValidationError
 from django.db.models import ExpressionWrapper, Sum, DurationField, F, Q
 from django.http import HttpResponse
 
+from employer.models import WorkShiftPlan
+
 POST_METHOD_STR = "POST"
 GET_METHOD_STR = "GET"
 PUT_METHOD_STR = "PUT"
@@ -155,7 +157,104 @@ def mobile_validator(phone_number: str):
         raise ValidationError("شماره موبایل نادرست است.")
 
 
+def positive_only(func):
+    def wrapper(*args, ):
+        print("Before calling the function.")
+        print(args)
+        for i in args:
+            if i < 0:
+                print(i)
+                raise ValidationError("i is negative")
+        func(*args, )
+        print("After calling the function.")
+
+    return wrapper
+
+
 class DailyStatus:
-    attend = overtime = absent = early_arrival = late_arrival = early_departure = late_departure = 0
-    date = None
+    middle_overtime = attend = overtime = absent = 0
+    first_period_early_arrival = first_period_late_arrival = first_period_early_departure = first_period_late_departure = 0
+    second_period_early_arrival = second_period_late_arrival = second_period_early_departure = second_period_late_departure = 0
     burned_out = {}
+
+    def __init__(self, plan: WorkShiftPlan):
+        self.plan: WorkShiftPlan = plan
+
+    def get_date(self):
+        return self.plan.date.strftime(DATE_FORMAT_STR)
+
+    @positive_only
+    def add_attend(self, attended):
+        self.attend += attended
+
+    @positive_only
+    def add_absent(self, absented):
+        self.absent += absented
+
+    @positive_only
+    def first_period_arrival_and_departure(self, early_arrival, late_arrival, early_departure, late_departure):
+        self.first_period_early_arrival += early_arrival
+        self.first_period_late_arrival += late_arrival
+        self.first_period_early_departure += early_departure
+        self.first_period_late_departure += late_departure
+
+    @positive_only
+    def second_period_arrival_and_departure(self, early_arrival, late_arrival, early_departure, late_departure):
+        self.second_period_early_arrival += early_arrival
+        self.second_period_late_arrival += late_arrival
+        self.second_period_early_departure += early_departure
+        self.second_period_late_departure += late_departure
+
+    @positive_only
+    def match_floating_time(self, late_departure, late_arrival):
+        if late_departure > 0 and late_arrival > 0:
+            if self.plan.floating_time is not None and self.plan.floating_time > 0:
+                floating_time = min(self.plan.floating_time, late_arrival)
+                if late_departure > floating_time:
+                    late_departure -= floating_time
+                    late_arrival -= floating_time
+                else:
+                    late_arrival -= late_departure
+                    late_departure = 0
+        return late_departure, late_arrival
+
+    def recalculate_floating_time(self):
+        self.first_period_late_departure, self.first_period_late_arrival = self.match_floating_time(self.first_period_late_departure, self.first_period_late_arrival)
+        self.second_period_late_departure, self.second_period_late_arrival = self.match_floating_time(self.second_period_late_departure, self.second_period_late_arrival)
+
+    def calculate_ending_overtime(self):
+        if self.second_period_late_departure > 0 and self.plan.ending_overtime is not None and self.plan.ending_overtime > 0:
+            ending_overtime = min(self.second_period_late_departure, self.plan.ending_overtime)
+            self.overtime += ending_overtime
+            if self.second_period_late_departure - ending_overtime > 0:
+                self.burned_out["ending_overtime"] = self.second_period_late_departure - ending_overtime
+
+    def calculate_beginning_overtime(self):
+        if self.first_period_early_arrival > 0:
+            if self.plan.beginning_overtime is not None and self.plan.beginning_overtime > 0:
+                beginning_overtime = min(self.first_period_early_arrival, self.plan.beginning_overtime)
+                self.overtime += beginning_overtime
+                if self.first_period_early_arrival - beginning_overtime > 0:
+                    self.burned_out["beginning_overtime"] = self.first_period_early_arrival - beginning_overtime
+
+    def calculate_middle_overtime(self):
+        if self.plan.second_period_start is not None:
+            if self.plan.middle_overtime is not None and self.plan.middle_overtime > 0:
+                combined = self.first_period_late_departure + self.second_period_early_arrival
+                middle_overtime = min(combined, self.plan.middle_overtime)
+                self.overtime += middle_overtime
+                burn_out = combined - middle_overtime
+                if burn_out > 0:
+                    self.burned_out["middle_overtime"] = burn_out
+
+    def calculate_all_overtimes(self):
+        self.calculate_ending_overtime()
+        self.calculate_beginning_overtime()
+        self.calculate_middle_overtime()
+    # def calculate_second_period_middle_overtime(self):
+    #     if self.second_period_early_arrival > 0 and self.plan.middle_overtime is not None and self.plan.middle_overtime > 0:
+    #         if self.middle_overtime > 0:
+    #             acceptable_overtime = self.plan.middle_overtime - self.middle_overtime
+    #         else:
+    #             acceptable_overtime = self.plan.middle_overtime
+    #         self.middle_overtime += min(self.second_period_early_arrival, acceptable_overtime)

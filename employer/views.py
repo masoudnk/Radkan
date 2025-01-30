@@ -42,6 +42,11 @@ def test(request, key, **kwargs):
         populate_shift_plans(request, request.GET.get("work_shift_id", 1))
     elif key == "sms":
         send_sms()
+    elif key == "dashboard":
+        employers = Employer.objects.all()
+        perm = Permission.objects.get(codename="view_dashboard")
+        for employer in employers:
+            employer.user_permissions.add(perm)
     else:
         return HttpResponse("bad", status=status.HTTP_400_BAD_REQUEST)
     return HttpResponse("ok", status=status.HTTP_200_OK)
@@ -582,6 +587,14 @@ def create_radkan_message(request, **kwargs):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view([DELETE_METHOD_STR])
+@check_user_permission(DELETE_PERMISSION_STR, Project)
+def delete_radkan_message(request, oid, **kwargs):
+    o = get_object_or_404(RadkanMessage, employer_id=kwargs["employer"], id=oid)
+    o.delete()
+    return Response({"msg": "DELETED"}, status=status.HTTP_200_OK)
+
+
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, RadkanMessage)
 def get_radkan_messages_list(request, **kwargs):
@@ -1053,7 +1066,7 @@ def get_managers_list(request, **kwargs):
 @check_user_permission(VIEW_PERMISSION_STR, Manager)
 def get_manager(request, oid, **kwargs):
     mg = get_object_or_404(Manager, employer_id=kwargs["employer"], id=oid)
-    return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_201_CREATED)
+    return Response(ManagerOutputSerializer(mg).data, status=status.HTTP_200_OK)
 
 
 @api_view([DELETE_METHOD_STR])
@@ -1115,4 +1128,3 @@ def get_employer_messages_list(request, **kwargs):
     msgs_list = EmployerMessage.objects.filter(employer_id=request.user.id)
     ser = EmployerMessageOutputSerializer(msgs_list, many=True)
     return Response(ser.data, status=status.HTTP_200_OK)
-

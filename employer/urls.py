@@ -99,6 +99,7 @@ urlpatterns = [
     path('get_radkan_messages_view_info_list/<int:oid>/', views.get_radkan_messages_view_info_list, name='get_radkan_messages_view_info_list'),
     path('get_radkan_messages_list/', views.get_radkan_messages_list, name='get_radkan_messages_list'),
     path('create_radkan_message/', views.create_radkan_message, name='create_radkan_message'),
+    path('delete_radkan_message/<int:oid>/', views.delete_radkan_message, name='delete_radkan_message'),
 
     # -----------------------------rtsp-----------------------------------#}
     path('create_rtsp/', views.create_rtsp, name='create_rtsp'),
