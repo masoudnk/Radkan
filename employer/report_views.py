@@ -162,60 +162,57 @@ def one_period_one_roll_call(plan, arrival, departure, daily_status=None):
         daily_status.add_attend(subtract_times(arrival, departure))
 
     if arrival > plan.first_period_start:
-        daily_status.late_arrival = subtract_times(plan.first_period_start, arrival)
+        daily_status.first_period_late_arrival = subtract_times(plan.first_period_start, arrival)
         if plan.permitted_delay is not None and plan.permitted_delay > 0:
-            if plan.permitted_delay > daily_status.late_arrival:
-                daily_status.late_arrival = 0
+            if plan.permitted_delay > daily_status.first_period_late_arrival:
+                daily_status.first_period_late_arrival = 0
 
     elif arrival < plan.first_period_start:
-        daily_status.early_arrival = subtract_times(arrival, plan.first_period_start)
+        daily_status.first_period_early_arrival = subtract_times(arrival, plan.first_period_start)
 
     if departure < plan.first_period_end:
-        daily_status.early_departure = subtract_times(arrival, plan.first_period_end)
+        daily_status.first_period_early_departure = subtract_times(arrival, plan.first_period_end)
         if plan.permitted_acceleration is not None and plan.permitted_acceleration > 0:
-            if daily_status.early_departure < plan.permitted_acceleration:
-                daily_status.early_departure = 0
+            if daily_status.first_period_early_departure < plan.permitted_acceleration:
+                daily_status.first_period_early_departure = 0
 
     if departure > plan.first_period_end:
-        daily_status.late_departure = subtract_times(plan.first_period_end, departure)
-        if daily_status.late_arrival > 0:
+        daily_status.first_period_late_departure = subtract_times(plan.first_period_end, departure)
+        if daily_status.first_period_late_arrival > 0:
             if plan.floating_time is not None and plan.floating_time > 0:
-                f = min(plan.floating_time, daily_status.late_arrival)
-                if daily_status.late_departure > f:
-                    daily_status.late_departure -= f
-                    daily_status.late_arrival -= f
+                f = min(plan.floating_time, daily_status.first_period_late_arrival)
+                if daily_status.first_period_late_departure > f:
+                    daily_status.first_period_late_departure -= f
+                    daily_status.first_period_late_arrival -= f
                 else:
-                    daily_status.late_arrival -= daily_status.late_departure
-                    daily_status.late_departure = 0
+                    daily_status.first_period_late_arrival -= daily_status.first_period_late_departure
+                    daily_status.first_period_late_departure = 0
 
     # --------------------------------------------------------------------------------
-    if daily_status.early_arrival > 0:
+    if daily_status.first_period_early_arrival > 0:
         if plan.beginning_overtime is not None and plan.beginning_overtime > 0:
-            b = min(daily_status.early_arrival, plan.beginning_overtime)
-            daily_status.overtime += b
-            if daily_status.early_arrival - b > 0:
-                daily_status.burned_out["beginning_overtime"] = daily_status.early_arrival - b
-    if daily_status.late_arrival > 0:
-        daily_status.absent += daily_status.late_arrival
+            b = min(daily_status.first_period_early_arrival, plan.beginning_overtime)
+            daily_status.first_period_overtime += b
+            if daily_status.first_period_early_arrival - b > 0:
+                daily_status.burned_out["beginning_overtime"] = daily_status.first_period_early_arrival - b
+    if daily_status.first_period_late_arrival > 0:
+        daily_status.absent += daily_status.first_period_late_arrival
 
-    if daily_status.early_departure > 0:
-        daily_status.absent += daily_status.late_arrival
-    if daily_status.late_departure > 0:
+    if daily_status.first_period_early_departure > 0:
+        daily_status.absent += daily_status.first_period_late_arrival
+    if daily_status.first_period_late_departure > 0:
         if plan.second_period_start is not None:
             if plan.middle_overtime is not None and plan.middle_overtime > 0:
-                o = min(daily_status.late_departure, plan.middle_overtime)
+                o = min(daily_status.first_period_late_departure, plan.middle_overtime)
                 daily_status.overtime += o
-                if daily_status.late_departure - o > 0:
-                    daily_status.burned_out["middle_overtime"] = daily_status.late_departure - o
+                if daily_status.first_period_late_departure - o > 0:
+                    daily_status.burned_out["middle_overtime"] = daily_status.first_period_late_departure - o
 
         elif plan.ending_overtime is not None and plan.ending_overtime > 0:
-            e = min(daily_status.late_departure, plan.ending_overtime)
+            e = min(daily_status.first_period_late_departure, plan.ending_overtime)
             daily_status.overtime += e
-            if daily_status.late_departure - e > 0:
-                daily_status.burned_out["ending_overtime"] = daily_status.late_departure - e
-    daily_status.absent = daily_status.absent
-    daily_status.overtime = daily_status.overtime
-
+            if daily_status.first_period_late_departure - e > 0:
+                daily_status.burned_out["ending_overtime"] = daily_status.first_period_late_departure - e
     return daily_status
 
 
@@ -235,7 +232,7 @@ def one_period_multiple_roll_calls(plan, roll_calls, ):
 
 def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
     stat = DailyStatus(plan)
-    stat.add_attend( calculate_roll_call_query_duration(roll_calls)[2])
+    stat.add_attend(calculate_roll_call_query_duration(roll_calls)[2])
     first_period_roll_calls = roll_calls.filter(arrival__lte=plan.first_period_end)
     if first_period_roll_calls:
         first_period_roll_calls = roll_calls.order_by('arrival')
@@ -528,22 +525,17 @@ def create_employee_report(employee: Employee):
     # todo add date in [start, end] filter parameter
     employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
     roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
-    plans = employee.work_shift.workshiftplan_set.all()
+    plans = employee.work_shift.workshiftplan_set.all().order_by("date")
     result = {"data": []}
     result.update(calculate_employee_requests(employee_requests, plans))
-    print(result)
     # ---------------------------------------------
     for plan in plans:
         date_str = plan.date.strftime(DATE_FORMAT_STR)
         plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
-        timetable = plan_roll_calls.values_list("arrival", "departure", )
         # fixme filter requests by date
         #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
-        today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION,
-                                                                                EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
-                                                                                EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE,
-                                                                                EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE,
-                                                                                ])
+        today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
+                                                                                EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ])
 
         if plan.plan_type == WorkShiftPlan.SIMPLE_PLAN_TYPE:
             if plan_roll_calls.exists():
@@ -560,7 +552,7 @@ def create_employee_report(employee: Employee):
                     # complex_attend()
                     pass
                 d = DailyStatusSerializer(stat).data
-                print(d)
+                # print(d)
                 result["data"].append(d)
             else:
                 absent[date_str] = calculate_daily_shift_duration(plan)

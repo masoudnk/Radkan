@@ -118,7 +118,8 @@ def update_work_mission_policy(request, wp_id, **kwargs):
 
 @api_view([POST_METHOD_STR])
 def create_earned_leave_policy(request, **kwargs):
-    wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
+    print(request.data)
+    wp = get_object_or_404(WorkPolicy, id=request.data.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     cpy_data["work_policy"] = wp.id
@@ -131,7 +132,7 @@ def create_earned_leave_policy(request, **kwargs):
 
 @api_view([POST_METHOD_STR])
 def create_sick_leave_policy(request, **kwargs):
-    wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
+    wp = get_object_or_404(WorkPolicy, id=request.data.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     cpy_data["work_policy"] = wp.id
@@ -144,7 +145,7 @@ def create_sick_leave_policy(request, **kwargs):
 
 @api_view([POST_METHOD_STR])
 def create_overtime_policy(request, **kwargs):
-    wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
+    wp = get_object_or_404(WorkPolicy, id=request.data.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     cpy_data["work_policy"] = wp.id
@@ -157,7 +158,7 @@ def create_overtime_policy(request, **kwargs):
 
 @api_view([POST_METHOD_STR])
 def create_manual_traffic_policy(request, **kwargs):
-    wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
+    wp = get_object_or_404(WorkPolicy, id=request.data.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     cpy_data["work_policy"] = wp.id
@@ -170,7 +171,7 @@ def create_manual_traffic_policy(request, **kwargs):
 
 @api_view([POST_METHOD_STR])
 def create_work_mission_policy(request, **kwargs):
-    wp = get_object_or_404(WorkPolicy, id=request.POST.get('work_policy_id'), employer_id=request.user.id)
+    wp = get_object_or_404(WorkPolicy, id=request.data.get('work_policy_id'), employer_id=request.user.id)
     cpy_data = request.data.copy()
     cpy_data["employer"] = request.user.id
     cpy_data["work_policy"] = wp.id

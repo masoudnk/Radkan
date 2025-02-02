@@ -157,13 +157,13 @@ def mobile_validator(phone_number: str):
 
 def positive_only(func):
     def wrapper(self, *args, ):
-        print("Before calling the function.")
-        print(args)
+        # print("Before calling the function.")
+        # print(args)
         for i in args:
             if i < 0:
-                print(i)
+                # print(i)
                 raise ValidationError("i is negative")
         func(self, *args, )
-        print("After calling the function.")
+        # print("After calling the function.")
 
     return wrapper

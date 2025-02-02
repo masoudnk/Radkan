@@ -37,7 +37,7 @@ def get_acceptable_permissions(model=Manager, filters=None):
 @api_view([POST_METHOD_STR, PUT_METHOD_STR])
 def test(request, key, **kwargs):
     if key == "roll_call":
-        populate_roll_call(14)
+        populate_roll_call(24)
     elif key == "plan":
         populate_shift_plans(request, request.GET.get("work_shift_id", 1))
     elif key == "sms":

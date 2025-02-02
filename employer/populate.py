@@ -12,15 +12,15 @@ from employer.utilities import DATE_FORMAT_STR
 def populate_roll_call(employee_id):
     samples = []
     klas = RollCall
-    for i in range(1, 11):
+    first_date = now().date()
+    for i in range(3):
         hour = 8 + random.randint(1, 4)
         minute = random.randint(1, 50)
-        second = random.randint(1, 50)
         samples.append(klas(
             employee_id=employee_id,
-            date=now() - timedelta(days=i),
-            arrival=datetime.time(hour, minute, second),
-            departure=datetime.time(hour + random.randint(1, 5), minute + random.randint(1, 5), second + random.randint(1, 5)),
+            date=first_date + timedelta(days=i),
+            arrival=datetime.time(hour, minute, 0),
+            departure=datetime.time(hour + random.randint(1, 5), minute, 0),
         ))
     klas.objects.bulk_create(samples)
     # print(samples)
@@ -28,8 +28,9 @@ def populate_roll_call(employee_id):
 
 def populate_shift_plans(request, workshift_id=1):
     plans = []
-    first_date = datetime.date(2025, 1, 1)
-    for i in range(1, 364):
+    # first_date = datetime.date(2025, 1, 1)
+    first_date = now().date()
+    for i in range(3):
         this_date = first_date + timedelta(days=i)
         plans.append({
             # "id": 3635 + i,
@@ -50,10 +51,16 @@ def populate_shift_plans(request, workshift_id=1):
             "permitted_traffic_end": "21:30:00",
             "is_night_shift": True,
             "reset_time": "04:30:00",
-            "first_period_start": "{:02d}:{:02d}:00".format(random.randint(8, 10), random.randint(0, 59)),
-            "first_period_end": "{:02d}:{:02d}:00".format(random.randint(10, 12), random.randint(0, 59)),
-            "second_period_start": "{:02d}:{:02d}:00".format(random.randint(16, 18), random.randint(0, 59)),
-            "second_period_end": "{:02d}:{:02d}:00".format(random.randint(18, 20), random.randint(0, 59)),
+            # "first_period_start": "{:02d}:{:02d}:00".format(random.randint(8, 10), random.randint(0, 59)),
+            # "first_period_end": "{:02d}:{:02d}:00".format(random.randint(10, 12), random.randint(0, 59)),
+            # "second_period_start": "{:02d}:{:02d}:00".format(random.randint(16, 18), random.randint(0, 59)),
+            # "second_period_end": "{:02d}:{:02d}:00".format(random.randint(18, 20), random.randint(0, 59)),
+
+            "first_period_start": "{:02d}:{:02d}:00".format(8, 30),
+            "first_period_end": "{:02d}:{:02d}:00".format(12, 30),
+            "second_period_start": "{:02d}:{:02d}:00".format(16, 30),
+            "second_period_end": "{:02d}:{:02d}:00".format(20, 30),
+
             "modifier_id": request.user.id,
         })
     ser = WorkShiftPlanUpdateSerializer(data=plans, many=True, context={'request': request})
