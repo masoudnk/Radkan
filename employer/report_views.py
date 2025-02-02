@@ -6,10 +6,99 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
 from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest, Workplace
-from employer.serializers import AttendeesSerializer, AbsenteesSerializer
+from employer.serializers import AttendeesSerializer, AbsenteesSerializer, DailyStatusSerializer
 from employer.utilities import subtract_times, calculate_roll_call_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes, send_response_file, \
-    REPORT_PERMISSION_STR, calculate_hourly_request_duration, calculate_daily_request_duration, DailyStatus, DASHBOARD_PERMISSION_STR
+    REPORT_PERMISSION_STR, calculate_hourly_request_duration, calculate_daily_request_duration, DASHBOARD_PERMISSION_STR, positive_only
 from employer.views import DATE_FORMAT_STR, check_user_permission, VIEW_PERMISSION_STR
+
+
+class DailyStatus:
+    middle_overtime = attend = overtime = absent = 0
+    first_period_early_arrival = first_period_late_arrival = first_period_early_departure = first_period_late_departure = 0
+    second_period_early_arrival = second_period_late_arrival = second_period_early_departure = second_period_late_departure = 0
+    burned_out = {}
+
+    def __init__(self, plan: WorkShiftPlan):
+        self.plan: WorkShiftPlan = plan
+
+    def get_date(self):
+        return self.plan.date.strftime(DATE_FORMAT_STR)
+
+    @positive_only
+    def add_attend(self, attended):
+        self.attend += attended
+
+    @positive_only
+    def add_absent(self, absented):
+        self.absent += absented
+
+    @positive_only
+    def first_period_arrival_and_departure(self, early_arrival, late_arrival, early_departure, late_departure):
+        self.first_period_early_arrival += early_arrival
+        self.first_period_late_arrival += late_arrival
+        self.first_period_early_departure += early_departure
+        self.first_period_late_departure += late_departure
+
+    @positive_only
+    def second_period_arrival_and_departure(self, early_arrival, late_arrival, early_departure, late_departure):
+        self.second_period_early_arrival += early_arrival
+        self.second_period_late_arrival += late_arrival
+        self.second_period_early_departure += early_departure
+        self.second_period_late_departure += late_departure
+
+    @positive_only
+    def match_floating_time(self, late_departure, late_arrival):
+        if late_departure > 0 and late_arrival > 0:
+            if self.plan.floating_time is not None and self.plan.floating_time > 0:
+                floating_time = min(self.plan.floating_time, late_arrival)
+                if late_departure > floating_time:
+                    late_departure -= floating_time
+                    late_arrival -= floating_time
+                else:
+                    late_arrival -= late_departure
+                    late_departure = 0
+        return late_departure, late_arrival
+
+    def recalculate_floating_time(self):
+        self.first_period_late_departure, self.first_period_late_arrival = self.match_floating_time(self.first_period_late_departure, self.first_period_late_arrival)
+        self.second_period_late_departure, self.second_period_late_arrival = self.match_floating_time(self.second_period_late_departure, self.second_period_late_arrival)
+
+    def calculate_ending_overtime(self):
+        if self.second_period_late_departure > 0 and self.plan.ending_overtime is not None and self.plan.ending_overtime > 0:
+            ending_overtime = min(self.second_period_late_departure, self.plan.ending_overtime)
+            self.overtime += ending_overtime
+            if self.second_period_late_departure - ending_overtime > 0:
+                self.burned_out["ending_overtime"] = self.second_period_late_departure - ending_overtime
+
+    def calculate_beginning_overtime(self):
+        if self.first_period_early_arrival > 0:
+            if self.plan.beginning_overtime is not None and self.plan.beginning_overtime > 0:
+                beginning_overtime = min(self.first_period_early_arrival, self.plan.beginning_overtime)
+                self.overtime += beginning_overtime
+                if self.first_period_early_arrival - beginning_overtime > 0:
+                    self.burned_out["beginning_overtime"] = self.first_period_early_arrival - beginning_overtime
+
+    def calculate_middle_overtime(self):
+        if self.plan.second_period_start is not None:
+            if self.plan.middle_overtime is not None and self.plan.middle_overtime > 0:
+                combined = self.first_period_late_departure + self.second_period_early_arrival
+                middle_overtime = min(combined, self.plan.middle_overtime)
+                self.overtime += middle_overtime
+                burn_out = combined - middle_overtime
+                if burn_out > 0:
+                    self.burned_out["middle_overtime"] = burn_out
+
+    def calculate_all_overtimes(self):
+        self.calculate_ending_overtime()
+        self.calculate_beginning_overtime()
+        self.calculate_middle_overtime()
+    # def calculate_second_period_middle_overtime(self):
+    #     if self.second_period_early_arrival > 0 and self.plan.middle_overtime is not None and self.plan.middle_overtime > 0:
+    #         if self.middle_overtime > 0:
+    #             acceptable_overtime = self.plan.middle_overtime - self.middle_overtime
+    #         else:
+    #             acceptable_overtime = self.plan.middle_overtime
+    #         self.middle_overtime += min(self.second_period_early_arrival, acceptable_overtime)
 
 
 @api_view()
@@ -137,8 +226,7 @@ def one_period_multiple_roll_calls(plan, roll_calls, ):
     folded_attend = 0
     for roll_call in roll_calls:
         folded_attend += subtract_times(roll_call.arrival, roll_call.departure)
-    stat = DailyStatus()
-    stat.date = plan.date
+    stat = DailyStatus(plan)
     stat.attend = folded_attend
     stat = one_period_one_roll_call(plan, folded_arrival, folded_departure, stat)
     stat.absent += (subtract_times(folded_arrival, folded_departure, ) - folded_attend)
@@ -147,7 +235,7 @@ def one_period_multiple_roll_calls(plan, roll_calls, ):
 
 def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
     stat = DailyStatus(plan)
-    stat.attend = calculate_roll_call_query_duration(roll_calls)
+    stat.add_attend( calculate_roll_call_query_duration(roll_calls)[2])
     first_period_roll_calls = roll_calls.filter(arrival__lte=plan.first_period_end)
     if first_period_roll_calls:
         first_period_roll_calls = roll_calls.order_by('arrival')
@@ -163,8 +251,7 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
 
     else:
         stat.absent += subtract_times(plan.first_period_start, plan.first_period_end)
-
-    second_period_roll_calls = roll_calls.exclude(first_period_roll_calls)
+    second_period_roll_calls = roll_calls.exclude(id__in=first_period_roll_calls.values_list('id', flat=True))
     if second_period_roll_calls:
         second_period_roll_calls = second_period_roll_calls.order_by('arrival')
         folded_arrival = second_period_roll_calls[0].arrival
@@ -208,67 +295,65 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
     return stat
 
 
-def simple_attend(plan, date_str, plan_roll_calls, burned_out, absent, overtime):
-    this_overtime = this_absent = this_early_arrival = this_late_arrival = this_early_departure = this_late_departure = 0
-    for roll_call in plan_roll_calls:
-        if roll_call.arrival < plan.first_period_end:
-            roll_call_result = calculate_arrival_and_departure(roll_call.arrival, roll_call.departure, plan.first_period_start, plan.first_period_end)
-        else:
-            roll_call_result = calculate_arrival_and_departure(roll_call.arrival, roll_call.departure, plan.second_period_start, plan.second_period_end)
-
-        this_early_arrival += roll_call_result[0]
-        this_late_arrival += roll_call_result[1]
-        this_early_departure += roll_call_result[2]
-        this_late_departure += roll_call_result[3]
-
-    # ----------------------------------------------------------------#}
-    if plan.permitted_delay is not None and plan.permitted_delay > 0:
-        if plan.permitted_delay > this_late_arrival:
-            this_late_arrival = 0
-
-    if plan.permitted_acceleration is not None and plan.permitted_acceleration > 0:
-        if this_early_departure < plan.permitted_acceleration:
-            this_early_departure = 0
-
-    if this_late_arrival > 0:
-        if plan.floating_time is not None and plan.floating_time > 0:
-            f = min(plan.floating_time, this_late_arrival)
-            if this_late_departure > f:
-                this_late_departure -= f
-                this_late_arrival -= f
-            else:
-                this_late_arrival -= this_late_departure
-                this_late_departure = 0
-
-    # --------------------------------------------------------------------------------
-    if this_early_arrival > 0:
-        if plan.beginning_overtime is not None and plan.beginning_overtime > 0:
-            b = min(this_early_arrival, plan.beginning_overtime)
-            this_overtime += b
-            if this_early_arrival - b > 0:
-                burned_out[date_str + "_beginning_overtime"] = this_early_arrival - b
-    if this_late_arrival > 0:
-        this_absent += this_late_arrival
-
-    if this_early_departure > 0:
-        this_absent += this_late_arrival
-    if this_late_departure > 0:
-        if plan.second_period_start is not None:
-            if plan.middle_overtime is not None and plan.middle_overtime > 0:
-                o = min(this_late_departure, plan.middle_overtime)
-                this_overtime += o
-                if this_late_departure - o > 0:
-                    burned_out[date_str + "_middle_overtime"] = this_late_departure - o
-
-        elif plan.ending_overtime is not None and plan.ending_overtime > 0:
-            e = min(this_late_departure, plan.ending_overtime)
-            this_overtime += e
-            if this_late_departure - e > 0:
-                burned_out[date_str + "_ending_overtime"] = this_late_departure - e
-    absent[date_str] = this_absent
-    overtime[date_str] = this_overtime
-
-
+# def simple_attend(plan, date_str, plan_roll_calls, burned_out, absent, overtime):
+#     this_overtime = this_absent = this_early_arrival = this_late_arrival = this_early_departure = this_late_departure = 0
+#     for roll_call in plan_roll_calls:
+#         if roll_call.arrival < plan.first_period_end:
+#             roll_call_result = calculate_arrival_and_departure(roll_call.arrival, roll_call.departure, plan.first_period_start, plan.first_period_end)
+#         else:
+#             roll_call_result = calculate_arrival_and_departure(roll_call.arrival, roll_call.departure, plan.second_period_start, plan.second_period_end)
+#
+#         this_early_arrival += roll_call_result[0]
+#         this_late_arrival += roll_call_result[1]
+#         this_early_departure += roll_call_result[2]
+#         this_late_departure += roll_call_result[3]
+#
+#     # ----------------------------------------------------------------#}
+#     if plan.permitted_delay is not None and plan.permitted_delay > 0:
+#         if plan.permitted_delay > this_late_arrival:
+#             this_late_arrival = 0
+#
+#     if plan.permitted_acceleration is not None and plan.permitted_acceleration > 0:
+#         if this_early_departure < plan.permitted_acceleration:
+#             this_early_departure = 0
+#
+#     if this_late_arrival > 0:
+#         if plan.floating_time is not None and plan.floating_time > 0:
+#             f = min(plan.floating_time, this_late_arrival)
+#             if this_late_departure > f:
+#                 this_late_departure -= f
+#                 this_late_arrival -= f
+#             else:
+#                 this_late_arrival -= this_late_departure
+#                 this_late_departure = 0
+#
+#     # --------------------------------------------------------------------------------
+#     if this_early_arrival > 0:
+#         if plan.beginning_overtime is not None and plan.beginning_overtime > 0:
+#             b = min(this_early_arrival, plan.beginning_overtime)
+#             this_overtime += b
+#             if this_early_arrival - b > 0:
+#                 burned_out[date_str + "_beginning_overtime"] = this_early_arrival - b
+#     if this_late_arrival > 0:
+#         this_absent += this_late_arrival
+#
+#     if this_early_departure > 0:
+#         this_absent += this_late_arrival
+#     if this_late_departure > 0:
+#         if plan.second_period_start is not None:
+#             if plan.middle_overtime is not None and plan.middle_overtime > 0:
+#                 o = min(this_late_departure, plan.middle_overtime)
+#                 this_overtime += o
+#                 if this_late_departure - o > 0:
+#                     burned_out[date_str + "_middle_overtime"] = this_late_departure - o
+#
+#         elif plan.ending_overtime is not None and plan.ending_overtime > 0:
+#             e = min(this_late_departure, plan.ending_overtime)
+#             this_overtime += e
+#             if this_late_departure - e > 0:
+#                 burned_out[date_str + "_ending_overtime"] = this_late_departure - e
+#     absent[date_str] = this_absent
+#     overtime[date_str] = this_overtime
 # def create_employee_report(employee):
 #     absent = {}
 #     attend = {}
@@ -444,13 +529,14 @@ def create_employee_report(employee: Employee):
     employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
     roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
     plans = employee.work_shift.workshiftplan_set.all()
-    result = calculate_employee_requests(employee_requests, plans)
+    result = {"data": []}
+    result.update(calculate_employee_requests(employee_requests, plans))
+    print(result)
     # ---------------------------------------------
     for plan in plans:
         date_str = plan.date.strftime(DATE_FORMAT_STR)
         plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
         timetable = plan_roll_calls.values_list("arrival", "departure", )
-        print(timetable)
         # fixme filter requests by date
         #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
         today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION,
@@ -461,12 +547,21 @@ def create_employee_report(employee: Employee):
 
         if plan.plan_type == WorkShiftPlan.SIMPLE_PLAN_TYPE:
             if plan_roll_calls.exists():
+                if plan.second_period_start is None and plan_roll_calls.count() == 1:
+                    stat = one_period_one_roll_call(plan, plan_roll_calls[0].arrival, plan_roll_calls[0].departure)
+                elif plan.second_period_start is None and plan_roll_calls.count() > 1:
+                    stat = one_period_multiple_roll_calls(plan, plan_roll_calls)
+                elif plan.second_period_start is not None:
+                    stat = two_period_multiple_roll_calls(plan, plan_roll_calls)
+                else:
+                    raise Exception("unhandled plan and roll call situation")
+
                 if today_hourly_employee_requests.exists():
                     # complex_attend()
                     pass
-                else:
-                    simple_attend(plan, date_str, plan_roll_calls, burned_out, absent, overtime)
-
+                d = DailyStatusSerializer(stat).data
+                print(d)
+                result["data"].append(d)
             else:
                 absent[date_str] = calculate_daily_shift_duration(plan)
         elif plan.plan_type == WorkShiftPlan.FLOATING_PLAN_TYPE:

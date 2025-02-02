@@ -258,7 +258,6 @@ class WorkplaceOutputSerializer(serializers.ModelSerializer):
         exclude = ("employer",)
 
 
-
 class EmployerMessageOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployerMessage
@@ -298,7 +297,7 @@ class WorkPolicySerializer(serializers.ModelSerializer):
 class WorkPolicyOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkPolicy
-        fields = ("name", "description",)
+        fields = ("id","name", "description",)
 
 
 class EarnedLeavePolicySerializer(serializers.ModelSerializer):
@@ -546,7 +545,29 @@ class ManagerOutputSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Manager
-        fields = ("id","expiration_date", "username", "mobile")
+        fields = ("id", "expiration_date", "username", "mobile")
+
+
+# class DailyStatusSerializer(serializers.Serializer):
+#     middle_overtime = attend = overtime = absent = first_period_early_arrival = first_period_late_arrival = first_period_early_departure = first_period_late_departure =\
+#         second_period_early_arrival = second_period_late_arrival = second_period_early_departure = second_period_late_departure = serializers.IntegerField()
+#     burned_out = serializers.DictField()
+
+class DailyStatusSerializer(serializers.Serializer):
+    date = serializers.CharField(source='get_date')
+    middle_overtime = serializers.IntegerField()
+    attend = serializers.IntegerField()
+    overtime = serializers.IntegerField()
+    absent = serializers.IntegerField()
+    first_period_early_arrival = serializers.IntegerField()
+    first_period_late_arrival = serializers.IntegerField()
+    first_period_early_departure = serializers.IntegerField()
+    first_period_late_departure = serializers.IntegerField()
+    second_period_early_arrival = serializers.IntegerField()
+    second_period_late_arrival = serializers.IntegerField()
+    second_period_early_departure = serializers.IntegerField()
+    second_period_late_departure = serializers.IntegerField()
+    burned_out = serializers.DictField()
 
 
 class WorkShiftPlanListSerializer(serializers.ListSerializer):
