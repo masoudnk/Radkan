@@ -1036,7 +1036,7 @@ def create_manager(request, **kwargs):
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view([POST_METHOD_STR])
+@api_view([PUT_METHOD_STR])
 @check_user_permission(CHANGE_PERMISSION_STR, Manager)
 def update_manager(request, oid, **kwargs):
     exp = datetime.strptime(request.data['expiration_date'], DATE_TIME_FORMAT_STR)
