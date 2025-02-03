@@ -297,7 +297,7 @@ class WorkPolicySerializer(serializers.ModelSerializer):
 class WorkPolicyOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkPolicy
-        fields = ("id","name", "description",)
+        fields = ("id", "name", "description",)
 
 
 class EarnedLeavePolicySerializer(serializers.ModelSerializer):
@@ -542,10 +542,15 @@ class RegisterManagerSerializer(serializers.ModelSerializer):
 
 class ManagerOutputSerializer(serializers.ModelSerializer):
     expiration_date = serializers.DateTimeField(format=DATE_TIME_FORMAT_STR)
+    permissions = serializers.SerializerMethodField("get_permissions")
+
+    def get_permissions(self, obj):
+        permissions = obj.user_permissions.all() | Permission.objects.filter(group__user=obj)
+        return PermissionSerializer(permissions, many=True).data
 
     class Meta:
         model = Manager
-        fields = ("id", "expiration_date", "username", "mobile")
+        fields = ("id", "expiration_date", "username", "mobile", "permissions")
 
 
 # class DailyStatusSerializer(serializers.Serializer):

@@ -171,7 +171,7 @@ def one_period_one_roll_call(plan, arrival, departure, daily_status=None):
         daily_status.first_period_early_arrival = subtract_times(arrival, plan.first_period_start)
 
     if departure < plan.first_period_end:
-        daily_status.first_period_early_departure = subtract_times(arrival, plan.first_period_end)
+        daily_status.first_period_early_departure = subtract_times(departure, plan.first_period_end)
         if plan.permitted_acceleration is not None and plan.permitted_acceleration > 0:
             if daily_status.first_period_early_departure < plan.permitted_acceleration:
                 daily_status.first_period_early_departure = 0
@@ -199,7 +199,7 @@ def one_period_one_roll_call(plan, arrival, departure, daily_status=None):
         daily_status.absent += daily_status.first_period_late_arrival
 
     if daily_status.first_period_early_departure > 0:
-        daily_status.absent += daily_status.first_period_late_arrival
+        daily_status.absent += daily_status.first_period_early_departure
     if daily_status.first_period_late_departure > 0:
         if plan.second_period_start is not None:
             if plan.middle_overtime is not None and plan.middle_overtime > 0:
