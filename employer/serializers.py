@@ -560,6 +560,7 @@ class ManagerOutputSerializer(serializers.ModelSerializer):
 
 class DailyStatusSerializer(serializers.Serializer):
     date = serializers.CharField(source='get_date')
+    weekday=serializers.CharField(source="get_weekday")
     middle_overtime = serializers.IntegerField()
     attend = serializers.IntegerField()
     overtime = serializers.IntegerField()

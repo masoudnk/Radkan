@@ -4,7 +4,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
 from employer.models import Employee, EmployeeRequest, RollCall, RadkanMessage, RadkanMessageViewInfo
-from employer.report_views import create_employee_report
+from employer.report_views import create_employee_total_report
 from employer.serializers import EmployeeDashboardSerializer, RollCallSerializer, EmployeeRequestOutputSerializer, WorkShiftPlanOutputSerializer, RollCallOutputSerializer, \
     RadkanMessageSerializer
 from employer.views import manage_and_create_employee_request, POST_METHOD_STR
@@ -54,7 +54,7 @@ def get_employee_requests_list(request, year, month):
 @api_view()
 def get_employee_report(request, year, month):
     employee = get_object_or_404(Employee, id=request.user.id)
-    report = create_employee_report(employee)
+    report = create_employee_total_report(employee)
     return Response(report, status=status.HTTP_200_OK)
 
 

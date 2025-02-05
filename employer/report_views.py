@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.utils.timezone import now
 from rest_framework import status
@@ -16,13 +17,16 @@ class DailyStatus:
     middle_overtime = attend = overtime = absent = 0
     first_period_early_arrival = first_period_late_arrival = first_period_early_departure = first_period_late_departure = 0
     second_period_early_arrival = second_period_late_arrival = second_period_early_departure = second_period_late_departure = 0
-    burned_out = {}
 
     def __init__(self, plan: WorkShiftPlan):
         self.plan: WorkShiftPlan = plan
+        self.burned_out = {}
 
     def get_date(self):
         return self.plan.date.strftime(DATE_FORMAT_STR)
+
+    def get_weekday(self):
+        return self.plan.date.jweekday()
 
     @positive_only
     def add_attend(self, attended):
@@ -31,6 +35,10 @@ class DailyStatus:
     @positive_only
     def add_absent(self, absented):
         self.absent += absented
+
+    @positive_only
+    def deduct_absent(self, accepted_time):
+        self.absent -= accepted_time
 
     @positive_only
     def first_period_arrival_and_departure(self, early_arrival, late_arrival, early_departure, late_departure):
@@ -137,7 +145,9 @@ def calculate_employee_requests(employee_requests, plans):
     daily_unpaid_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE)
     unpaid_leave = calculate_hourly_request_duration(hourly_unpaid_leave) + calculate_daily_request_duration(daily_unpaid_leave, plans)
 
-    return {"missions": missions, "earned_leave": earned_leave, "sick_leave": sick_leave, "unpaid_leave": unpaid_leave, }
+    return {"missions": total_minute_to_hour_and_minutes(missions), "earned_leave": total_minute_to_hour_and_minutes(earned_leave),
+            "sick_leave": total_minute_to_hour_and_minutes(sick_leave), "unpaid_leave": total_minute_to_hour_and_minutes(unpaid_leave),
+            "integers": {"missions": missions, "earned_leave": earned_leave, "sick_leave": sick_leave, "unpaid_leave": unpaid_leave, }}
 
 
 def calculate_arrival_and_departure(arrival, departure, period_start, period_end):
@@ -151,7 +161,7 @@ def calculate_arrival_and_departure(arrival, departure, period_start, period_end
     if departure < period_end:
         this_early_departure = subtract_times(arrival, period_end)
 
-    if departure > period_end:
+    elif departure > period_end:
         this_late_departure = subtract_times(period_end, departure)
     return this_early_arrival, this_late_arrival, this_early_departure, this_late_departure
 
@@ -189,12 +199,13 @@ def one_period_one_roll_call(plan, arrival, departure, daily_status=None):
                     daily_status.first_period_late_departure = 0
 
     # --------------------------------------------------------------------------------
+    # todo if employee has absence during shift , it won't be deducted from overtimes
     if daily_status.first_period_early_arrival > 0:
         if plan.beginning_overtime is not None and plan.beginning_overtime > 0:
             b = min(daily_status.first_period_early_arrival, plan.beginning_overtime)
-            daily_status.first_period_overtime += b
+            daily_status.overtime += b
             if daily_status.first_period_early_arrival - b > 0:
-                daily_status.burned_out["beginning_overtime"] = daily_status.first_period_early_arrival - b
+                daily_status.burned_out["pre_shift_overtime"] = daily_status.first_period_early_arrival - b
     if daily_status.first_period_late_arrival > 0:
         daily_status.absent += daily_status.first_period_late_arrival
 
@@ -206,13 +217,13 @@ def one_period_one_roll_call(plan, arrival, departure, daily_status=None):
                 o = min(daily_status.first_period_late_departure, plan.middle_overtime)
                 daily_status.overtime += o
                 if daily_status.first_period_late_departure - o > 0:
-                    daily_status.burned_out["middle_overtime"] = daily_status.first_period_late_departure - o
+                    daily_status.burned_out["middle_shift_overtime"] = daily_status.first_period_late_departure - o
 
         elif plan.ending_overtime is not None and plan.ending_overtime > 0:
             e = min(daily_status.first_period_late_departure, plan.ending_overtime)
             daily_status.overtime += e
             if daily_status.first_period_late_departure - e > 0:
-                daily_status.burned_out["ending_overtime"] = daily_status.first_period_late_departure - e
+                daily_status.burned_out["past_shift_overtime"] = daily_status.first_period_late_departure - e
     return daily_status
 
 
@@ -224,9 +235,9 @@ def one_period_multiple_roll_calls(plan, roll_calls, ):
     for roll_call in roll_calls:
         folded_attend += subtract_times(roll_call.arrival, roll_call.departure)
     stat = DailyStatus(plan)
-    stat.attend = folded_attend
+    stat.add_attend(folded_attend)
+    stat.add_absent(subtract_times(folded_arrival, folded_departure, ) - folded_attend)
     stat = one_period_one_roll_call(plan, folded_arrival, folded_departure, stat)
-    stat.absent += (subtract_times(folded_arrival, folded_departure, ) - folded_attend)
     return stat
 
 
@@ -235,20 +246,20 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
     stat.add_attend(calculate_roll_call_query_duration(roll_calls)[2])
     first_period_roll_calls = roll_calls.filter(arrival__lte=plan.first_period_end)
     if first_period_roll_calls:
-        first_period_roll_calls = roll_calls.order_by('arrival')
+        first_period_roll_calls = first_period_roll_calls.order_by('arrival')
         folded_arrival = first_period_roll_calls[0].arrival
         folded_departure = first_period_roll_calls.last().departure
         folded_attend = 0
         for roll_call in first_period_roll_calls:
             folded_attend += subtract_times(roll_call.arrival, roll_call.departure)
-        stat.absent += (subtract_times(folded_arrival, folded_departure, ) - folded_attend)
-        # stat.early_arrival, stat.late_arrival, stat.early_departure, stat.late_departure = calculate_arrival_and_departure(
-        #     folded_arrival, folded_departure, plan.first_period_start, plan.first_period_end)
+        stat.add_absent(subtract_times(folded_arrival, folded_departure, ) - folded_attend)
+        print(stat.absent)
         stat.first_period_arrival_and_departure(*calculate_arrival_and_departure(folded_arrival, folded_departure, plan.first_period_start, plan.first_period_end))
 
     else:
         stat.absent += subtract_times(plan.first_period_start, plan.first_period_end)
-    second_period_roll_calls = roll_calls.exclude(id__in=first_period_roll_calls.values_list('id', flat=True))
+    second_period_roll_calls = roll_calls.filter(arrival__gte=plan.first_period_end)
+    # second_period_roll_calls = roll_calls.exclude(id__in=first_period_roll_calls.values_list('id', flat=True))
     if second_period_roll_calls:
         second_period_roll_calls = second_period_roll_calls.order_by('arrival')
         folded_arrival = second_period_roll_calls[0].arrival
@@ -260,7 +271,6 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
         stat.second_period_arrival_and_departure(*calculate_arrival_and_departure(folded_arrival, folded_departure, plan.second_period_start, plan.second_period_end))
     else:
         stat.absent += subtract_times(plan.second_period_start, plan.second_period_end)
-
     # --------------------------------------------------------------------------------
     if stat.first_period_late_arrival + stat.second_period_late_arrival > 0:
         if plan.permitted_delay is not None and plan.permitted_delay > 0:
@@ -516,10 +526,100 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
 #         "sick": sick,
 #         "unpaid": unpaid,
 #     }
+def deduct_request_time_from_absense(req: EmployeeRequest, period_start, period_end):
+    if req.time < period_start:
+        time_start = period_start
+    else:
+        time_start = req.time
+    if req.to_time < period_end:
+        time_end = req.to_time
+    else:
+        time_end = period_end
+    return subtract_times(time_start, time_end)
 
-def create_employee_report(employee: Employee):
+
+def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests):
+    if plan.plan_type == WorkShiftPlan.SIMPLE_PLAN_TYPE:
+        if plan_roll_calls.exists():
+            if plan.second_period_start is None and plan_roll_calls.count() == 1:
+                stat = one_period_one_roll_call(plan, plan_roll_calls[0].arrival, plan_roll_calls[0].departure)
+            elif plan.second_period_start is None and plan_roll_calls.count() > 1:
+                stat = one_period_multiple_roll_calls(plan, plan_roll_calls)
+            elif plan.second_period_start is not None:
+                stat = two_period_multiple_roll_calls(plan, plan_roll_calls)
+            else:
+                raise Exception("unhandled plan and roll call situation")
+
+            if hourly_employee_requests.exists():
+                for req in hourly_employee_requests:
+                    if req.time < plan.first_period_end:
+                        req_time = deduct_request_time_from_absense(req, plan.first_period_start, plan.first_period_end)
+                    else:
+                        req_time = deduct_request_time_from_absense(req, plan.second_period_start, plan.second_period_end)
+                    print(stat.absent)
+                    stat.deduct_absent(req_time)
+        else:
+            stat = DailyStatus(plan)
+            stat.add_absent(calculate_daily_shift_duration(plan))
+        return stat
+    elif plan.plan_type == WorkShiftPlan.FLOATING_PLAN_TYPE:
+        stat = DailyStatus(plan)
+        if plan_roll_calls.exists():
+            total_minutes = calculate_roll_call_query_duration(plan_roll_calls)[2]
+            stat.add_attend(total_minutes)
+            if total_minutes > plan.daily_duty_duration:
+                this_overtime = total_minutes - plan.daily_duty_duration
+                if plan.daily_overtime_limit is not None and plan.daily_overtime_limit > 0:
+                    stat.overtime += min(this_overtime, plan.daily_overtime_limit)
+                    if this_overtime > plan.daily_overtime_limit:
+                        stat.burned_out["floating_shift_overtime"] = this_overtime - plan.daily_overtime_limit
+
+        else:
+            stat.add_absent(plan.daily_duty_duration)
+    else:
+        raise ValidationError("WorkShiftPlan PLAN_TYPE is not acceptable")
+    return stat
+
+
+def create_employee_timeline_report(employee: Employee):
+    employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
+    roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
+    plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+    timetable = []
+    for plan in plans:
+        plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
+        # fixme filter requests by date
+        #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
+        today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
+                                                                                EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ])
+        stat = create_employee_daily_report(plan, plan_roll_calls, today_hourly_employee_requests)
+        timetable.append(stat)
+    return timetable
+
+
+def create_employee_traffic_report(employee: Employee):
+    employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
+    roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
+    plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+    timetable = []
+    for plan in plans:
+        plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
+        # fixme filter requests by date
+        #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
+        today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
+                                                                                EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ],
+                                                                  date=plan.date)
+        stat = create_employee_daily_report(plan, plan_roll_calls, today_hourly_employee_requests)
+        a = DailyStatusSerializer(stat).data
+        a["burned_out"] = sum(stat.burned_out.values())
+        b = calculate_employee_requests(today_hourly_employee_requests, plans)
+        b.update(a)
+        timetable.append(b)
+    return timetable
+
+
+def create_employee_total_report(employee: Employee):
     absent = {}
-    attend = {}
     overtime = {}
     burned_out = {}
     # todo add date in [start, end] filter parameter
@@ -529,55 +629,24 @@ def create_employee_report(employee: Employee):
     result = {"data": []}
     result.update(calculate_employee_requests(employee_requests, plans))
     # ---------------------------------------------
-    for plan in plans:
-        date_str = plan.date.strftime(DATE_FORMAT_STR)
-        plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
-        # fixme filter requests by date
-        #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
-        today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
-                                                                                EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ])
-
-        if plan.plan_type == WorkShiftPlan.SIMPLE_PLAN_TYPE:
-            if plan_roll_calls.exists():
-                if plan.second_period_start is None and plan_roll_calls.count() == 1:
-                    stat = one_period_one_roll_call(plan, plan_roll_calls[0].arrival, plan_roll_calls[0].departure)
-                elif plan.second_period_start is None and plan_roll_calls.count() > 1:
-                    stat = one_period_multiple_roll_calls(plan, plan_roll_calls)
-                elif plan.second_period_start is not None:
-                    stat = two_period_multiple_roll_calls(plan, plan_roll_calls)
-                else:
-                    raise Exception("unhandled plan and roll call situation")
-
-                if today_hourly_employee_requests.exists():
-                    # complex_attend()
-                    pass
-                d = DailyStatusSerializer(stat).data
-                # print(d)
-                result["data"].append(d)
-            else:
-                absent[date_str] = calculate_daily_shift_duration(plan)
-        elif plan.plan_type == WorkShiftPlan.FLOATING_PLAN_TYPE:
-            if plan_roll_calls.exists():
-                total_minutes = calculate_roll_call_query_duration(plan_roll_calls)
-                attend[date_str] = total_minutes
-                if total_minutes > plan.daily_duty_duration:
-                    this_overtime = total_minutes - plan.daily_duty_duration
-                    if plan.daily_overtime_limit is not None and plan.daily_overtime_limit > 0:
-                        overtime[date_str] = min(this_overtime, plan.daily_overtime_limit)
-                        if this_overtime > plan.daily_overtime_limit:
-                            burned_out[date_str] = this_overtime - plan.daily_overtime_limit
-
-            else:
-                absent[date_str] = plan.daily_duty_duration
-        else:
-            return Response({"msg": "WorkShiftPlan PLAN_TYPE is not acceptable"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+    timeline = create_employee_timeline_report(employee)
+    for stat in timeline:
+        if stat.absent > 0:
+            absent[stat.get_date()] = stat.absent
+        if stat.overtime > 0:
+            overtime[stat.get_date()] = stat.overtime
+        total_burned_out = sum(stat.burned_out.values())
+        if total_burned_out > 0:
+            burned_out[stat.get_date()] = total_burned_out
 
     result.update({
         "total_attend": total_minute_to_hour_and_minutes(calculate_roll_call_query_duration(roll_calls)[2]),
-        "total_absent": sum(absent.values()),
-        "total_overtime": sum(overtime.values()),
-        "total_burned_out": sum(burned_out.values()),
+        "total_absent": total_minute_to_hour_and_minutes(sum(absent.values())),
+        "total_overtime": total_minute_to_hour_and_minutes(sum(overtime.values())),
+        "total_burned_out": total_minute_to_hour_and_minutes(sum(burned_out.values())),
         "days_attended": roll_calls.distinct("date").count(),
+        "employee": employee.get_full_name(),
+        "employee_id": employee.id,
         # "absent": absent,
         # "attend": attend,
         # "overtime": overtime,
@@ -591,7 +660,7 @@ def filter_employees_and_their_requests(request, **kwargs):  # a view request
     employees = Employee.objects.filter(employer_id=kwargs['employer'])
     result = []
     for employee in employees:
-        result.append(create_employee_report(employee))
+        result.append(create_employee_total_report(employee))
     return result
 
 
@@ -605,12 +674,11 @@ def report_employees_function(request, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employees_function_report_excel(request, **kwargs):
-    # fixme this is placebo...
-    #  workplaces_list = filter_employees_and_their_requests(request)
-    workplaces_list = Workplace.objects.all()
-    data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
-    for fin in workplaces_list:
-        data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
+    result = filter_employees_and_their_requests(request, **kwargs)
+    cols = ["employee", "total_attend", "total_absent", "total_overtime", "missions", "earned_leave", "sick_leave", "unpaid_leave", "total_burned_out", "days_attended"]
+    data = [["نام", "مجموع حضور", "غیبت", "اضافه کار", "ماموریت", "مرخصی استحقاقی", "مرخصی استعلاجی", "مرخصی بی حقوق", "مازاد حضور", "روز کارکرد", ]]
+    for row in result:
+        data.append([row[key] for key in cols])
     return send_response_file(data, 'employees_function_report')
 
 
@@ -618,78 +686,110 @@ def get_employees_function_report_excel(request, **kwargs):
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employee_report(request, oid, **kwargs):
     employee = get_object_or_404(Employee, id=oid, employer_id=kwargs["employer"])
-    report = create_employee_report(employee)
+    report = create_employee_total_report(employee)
+    return Response(report, status=status.HTTP_200_OK)
+
+
+def get_leave_requests(employee: Employee, year):
+    employee_requests = EmployeeRequest.objects.filter(
+        Q(category=EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE) |
+        Q(category=EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE) |
+        Q(category=EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE) |
+        Q(category=EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE) |
+        Q(category=EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE) |
+        Q(category=EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE),
+        employee=employee, status=EmployeeRequest.STATUS_APPROVED,
+        date__year=year)
+    return employee_requests
+
+
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
+def report_employee_traffic(request, oid, **kwargs):
+    # todo filter by date too
+    emp = get_object_or_404(Employee, id=oid, employer_id=kwargs.get("employer"))
+    report = create_employee_traffic_report(emp)
     return Response(report, status=status.HTTP_200_OK)
 
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_personnel_leave(request, **kwargs):
+def get_employee_traffic_report_excel(request, oid, **kwargs):
+    # todo filter by date too
+    emp = get_object_or_404(Employee, id=oid, employer_id=kwargs.get("employer"))
+    report = create_employee_traffic_report(emp)
+    cols = ["date", "weekday", "attend", "absent", "earned_leave", "sick_leave", "unpaid_leave", "overtime", "burned_out", "missions"]
+    data = [["تاریخ", "روز هفته", "کل حضور", "غیبت", "مرخصی استحقاقی", "مرخصی استعلاجی", "مرخصی بی حقوق", "اضافه کار", "مازاد حضور", "ماموریت", ]]
+    for row in report:
+        data.append([row[key] for key in cols])
+    return send_response_file(data, 'employee_traffic_report')
+
+
+def filter_employee_and_lives(employee, kwargs):
+    plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+    yearly = get_leave_requests(employee, kwargs.get("year"))
+    monthly = yearly.filter(date__month=kwargs.get("month"))
+    monthly_used = sum(calculate_employee_requests(monthly, plans)["integers"].values())
+    yearly_used = sum(calculate_employee_requests(yearly, plans)["integers"].values())
+    lp = employee.work_policy.earnedleavepolicy
+    if lp:
+        lp_m = lp.maximum_hour_per_month * 60 + lp.maximum_minute_per_month
+        lp_y = lp.maximum_hour_per_year * 60 + lp.maximum_minute_per_year
+    else:
+        lp_m = 0
+        lp_y = 0
+    return {"monthly_used": monthly_used,
+            "yearly_used": yearly_used,
+            "monthly_count": monthly.count(),
+            "yearly_count": yearly.count(),
+            "monthly_remained": lp_m,
+            "yearly_remained": lp_y
+            }
+
+
+#     return report
+
+
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
+def report_employee_leave(request, oid, **kwargs):
+    employee = get_object_or_404(Employee, id=oid, employer_id=kwargs.get("employer"))
+    return Response(filter_employee_and_lives(employee, kwargs), status=status.HTTP_200_OK)
+
+
+@api_view()
+@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
+def report_employees_leave(request, **kwargs):
     # todo filter to month and year
     employees = Employee.objects.filter(employer_id=request.user.id)
+    result = []
     for employee in employees:
-        monthly = {}
-        yearly = {}
-        total_monthly = total_yearly = balance_monthly = balance_yearly = 0
-
-        employee_requests = EmployeeRequest.objects.filter(
-            Q(category=EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE) |
-            Q(category=EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE) |
-            Q(category=EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE) |
-            Q(category=EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE) |
-            Q(category=EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE) |
-            Q(category=EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE),
-            employee=employee, action=EmployeeRequest.STATUS_APPROVED)
+        row = filter_employee_and_lives(employee, kwargs)
+        row.update({"personnel_code": employee.personnel_code, "employee": employee.get_full_name()})
+        result.append(row)
+    return Response(result, status=status.HTTP_200_OK)
 
 
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_employee_traffic(request, **kwargs):
-    emp = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
-    report = create_employee_report(emp)
-    return Response(report, status=status.HTTP_200_OK)
+def get_employees_leave_excel(request, **kwargs):
+    # todo filter to month and year
+    employees = Employee.objects.filter(employer_id=request.user.id)
+    result = [["کد", "نام", "استفاده ماهانه", "استفاده سالانه", "تعداد ماهانه", "تعداد سالانه", "مانده ماهانه", "مانده سالانه", ]]
+    cols = ["personnel_code","employee","monthly_used","yearly_used","monthly_count","yearly_count","monthly_remained","yearly_remained",]
+    for employee in employees:
+        data = [employee.personnel_code, employee.get_full_name()]
+        row = filter_employee_and_lives(employee, kwargs)
+        for key in cols:
+            data.append(row[key])
+        result.append(data)
+    return send_response_file(result, 'personnel_leave')
 
-
-@api_view()
-@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employee_traffic_report_excel(request, **kwargs):
-    # fixme this is placebo...
-    #  workplaces_list = filter_employees_and_their_requests(request)
-    workplaces_list = Workplace.objects.all()
-    data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
-    for fin in workplaces_list:
-        data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
-    return send_response_file(data, 'employees_function_report')
-
-
-def filter_employee_and_lives(request):
-    emp = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
-    report = create_employee_report(emp)
-    return report
-
-
-@api_view()
-@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def report_employee_leave(request, **kwargs):
-    report = filter_employee_and_lives(request)
-    return Response(report, status=status.HTTP_200_OK)
-
-
-@api_view()
-@check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
-def get_employee_leave_report_excel(request, **kwargs):
-    # fixme this is placebo...
-    #  workplaces_list = filter_employee_and_lives(request)(request)
-    workplaces_list = Workplace.objects.all()
-    data = [["name", "city", "address", "radius", "latitude", "longitude", "BSSID"]]
-    for fin in workplaces_list:
-        data.append([fin.name, fin.city, fin.address, fin.radius, fin.latitude, fin.longitude, fin.BSSID])
-    return send_response_file(data, 'employees_function_report')
 
 
 def filter_project_traffic(request):
     emp = get_object_or_404(Employee, id=request.data.get("employee_id"), employer_id=request.user.id)
-    report = create_employee_report(emp)
+    report = create_employee_total_report(emp)
     return report
 
 

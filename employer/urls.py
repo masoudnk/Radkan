@@ -123,10 +123,12 @@ urlpatterns = [
     path('get_employer_dashboard/', report_views.get_employer_dashboard, name='get_employer_dashboard'),
     path('get_employee_report/<int:oid>/', report_views.get_employee_report, name='get_employee_report'),
     path('get_employees_function_report_excel/', report_views.get_employees_function_report_excel, name='get_employees_function_report_excel'),
-    path('report_employee_traffic/', report_views.report_employee_traffic, name='report_employee_traffic'),
+    path('report_employee_traffic/<int:oid>/', report_views.report_employee_traffic, name='report_employee_traffic'),
     path('get_employee_traffic_report_excel/', report_views.get_employee_traffic_report_excel, name='get_employee_traffic_report_excel'),
-    path('report_employee_leave/', report_views.report_employee_leave, name='report_employee_leave'),
-    path('get_employee_leave_report_excel/', report_views.get_employee_leave_report_excel, name='get_employee_leave_report_excel'),
+    path('report_employee_leave/<int:oid>/', report_views.report_employee_leave, name='report_employee_leave'),
+    path('report_employees_leave/', report_views.report_employees_leave, name='report_employees_leave'),
+    path('report_project_traffic/', report_views.report_project_traffic, name='report_project_traffic'),
+    path('get_employees_leave_excel/', report_views.get_employees_leave_excel, name='get_employees_leave_excel'),
 
     # -------------------------------policy_views---------------------------------
     path('get_work_policies_list/', policy_views.get_work_policies_list, name='get_work_policies_list'),
