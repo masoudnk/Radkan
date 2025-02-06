@@ -97,6 +97,9 @@ class DailyStatus:
                     self.burned_out["middle_overtime"] = burn_out
 
     def calculate_all_overtimes(self):
+        # fixme is this true?
+        self.recalculate_floating_time()
+
         self.calculate_ending_overtime()
         self.calculate_beginning_overtime()
         self.calculate_middle_overtime()
@@ -253,7 +256,7 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
         for roll_call in first_period_roll_calls:
             folded_attend += subtract_times(roll_call.arrival, roll_call.departure)
         stat.add_absent(subtract_times(folded_arrival, folded_departure, ) - folded_attend)
-        print(stat.absent)
+        # print(stat.absent)
         stat.first_period_arrival_and_departure(*calculate_arrival_and_departure(folded_arrival, folded_departure, plan.first_period_start, plan.first_period_end))
 
     else:
@@ -556,7 +559,7 @@ def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests
                         req_time = deduct_request_time_from_absense(req, plan.first_period_start, plan.first_period_end)
                     else:
                         req_time = deduct_request_time_from_absense(req, plan.second_period_start, plan.second_period_end)
-                    print(stat.absent)
+                    # print(stat.absent)
                     stat.deduct_absent(req_time)
         else:
             stat = DailyStatus(plan)
@@ -573,6 +576,7 @@ def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests
                     stat.overtime += min(this_overtime, plan.daily_overtime_limit)
                     if this_overtime > plan.daily_overtime_limit:
                         stat.burned_out["floating_shift_overtime"] = this_overtime - plan.daily_overtime_limit
+            #todo else add absent?
 
         else:
             stat.add_absent(plan.daily_duty_duration)
@@ -726,6 +730,7 @@ def get_employee_traffic_report_excel(request, oid, **kwargs):
 
 
 def filter_employee_and_lives(employee, kwargs):
+    # todo filter by type
     plans = employee.work_shift.workshiftplan_set.all().order_by("date")
     yearly = get_leave_requests(employee, kwargs.get("year"))
     monthly = yearly.filter(date__month=kwargs.get("month"))
