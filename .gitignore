@@ -9,7 +9,7 @@ media
 !**/migrations/__init__.py
 # Backup files # 
 *.bak 
-
+Radkan/settings.py
 # If you are using PyCharm #
 .idea
 .idea/*
