@@ -165,8 +165,8 @@ DATABASES = {
         'NAME': 'radkan',  # database name
         'USER': 'root',
         'PASSWORD': 'g7lUe9jrnUSrj8hrouik7BAw',
-        'HOST': 'radkan-attendance-db',
-        'PORT': '5432',
+        'HOST': 'logan.liara.cloud',
+        'PORT': '31982',
     }
 }
 
