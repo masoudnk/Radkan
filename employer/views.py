@@ -276,7 +276,6 @@ def import_work_places_excel(request, **kwargs):
     workbook = openpyxl.load_workbook(request.FILES["excel_file"], read_only=True)
     worksheet = workbook.active
     workplaces = []
-    # fixme should we remove "BSSID"
     titles = ["name", "city", "address", "radius", "latitude", "longitude", ]
     for row in worksheet.iter_rows(min_row=2):
         dictionary = {}

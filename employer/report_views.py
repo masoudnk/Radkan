@@ -22,6 +22,37 @@ class DailyStatus:
         self.plan: WorkShiftPlan = plan
         self.burned_out = {}
 
+    def deduct_absence_from_overtimes(self):
+        if self.absent > 0 and self.first_period_early_arrival + self.first_period_late_departure + self.second_period_early_arrival + self.second_period_late_departure > 0:
+            if self.first_period_early_arrival > 0:
+                if self.first_period_early_arrival >= self.absent:
+                    self.first_period_early_arrival -= self.absent
+                    self.absent = 0
+                else:
+                    self.absent -= self.first_period_early_arrival
+                    self.first_period_early_arrival = 0
+            elif self.first_period_late_departure > 0:
+                if self.first_period_late_departure >= self.absent:
+                    self.first_period_late_departure -= self.absent
+                    self.absent = 0
+                else:
+                    self.absent -= self.first_period_late_departure
+                    self.first_period_late_departure = 0
+            elif self.second_period_early_arrival > 0:
+                if self.second_period_early_arrival >= self.absent:
+                    self.second_period_early_arrival -= self.absent
+                    self.absent = 0
+                else:
+                    self.absent -= self.second_period_early_arrival
+                    self.second_period_early_arrival = 0
+            else:
+                if self.second_period_late_departure >= self.absent:
+                    self.second_period_late_departure -= self.absent
+                    self.absent = 0
+                else:
+                    self.absent -= self.second_period_late_departure
+                    self.second_period_late_departure = 0
+
     def get_date(self):
         return self.plan.date.strftime(DATE_FORMAT_STR)
 
@@ -110,6 +141,49 @@ class DailyStatus:
     #         else:
     #             acceptable_overtime = self.plan.middle_overtime
     #         self.middle_overtime += min(self.second_period_early_arrival, acceptable_overtime)
+
+
+def calculate_total_roll_calls_and_traffics(roll_calls: QuerySet[RollCall], traffics: QuerySet[EmployeeRequest]):
+    calculated_roll_calls = []
+    arrives = []
+    departs = []
+    employee = roll_calls[0].employee
+    date = roll_calls[0].date
+    for r in roll_calls:
+        if r.arrival:
+            arrives.append(r.arrival)
+        elif r.departure:
+            departs.append(r.departure)
+        else:
+            raise ValidationError("roll call has no arrival or departure")
+    for t in traffics:
+        if t.manual_traffic_type == EmployeeRequest.Login:
+            arrives.append(t.time)
+        elif t.manual_traffic_type == EmployeeRequest.Logout:
+            departs.append(t.time)
+        else:
+            raise ValidationError("manual traffic type is not acceptable")
+    arrives.sort(reverse=True)
+    departs.sort(reverse=True)
+
+    for a in arrives:
+        nearest_departure = last_duration = None
+        for d in departs:
+            if a > d:
+                break
+            duration = subtract_times(a, d)
+            if last_duration is None or duration < last_duration:
+                last_duration = duration
+                nearest_departure = d
+        if nearest_departure is not None:
+            calculated_roll_calls.append(RollCall(
+                employee=employee,
+                date=date,
+                arrival=a,
+                departure=nearest_departure,
+            ))
+            departs.remove(nearest_departure)
+    return calculated_roll_calls
 
 
 @api_view()
@@ -202,7 +276,8 @@ def one_period_one_roll_call(plan, arrival, departure, daily_status=None):
                     daily_status.first_period_late_departure = 0
 
     # --------------------------------------------------------------------------------
-    # todo if employee has absence during shift , it won't be deducted from overtimes
+    daily_status.deduct_absence_from_overtimes()
+    # --------------------------------------------------------------------------------
     if daily_status.first_period_early_arrival > 0:
         if plan.beginning_overtime is not None and plan.beginning_overtime > 0:
             b = min(daily_status.first_period_early_arrival, plan.beginning_overtime)
@@ -544,7 +619,7 @@ def deduct_request_time_from_absense(req: EmployeeRequest, period_start, period_
 def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests):
     if plan.plan_type == WorkShiftPlan.SIMPLE_PLAN_TYPE:
         if plan_roll_calls.exists():
-            if plan.second_period_start is None and plan_roll_calls.count() == 1:
+            if plan.second_period_start is None and len(plan_roll_calls) == 1:
                 stat = one_period_one_roll_call(plan, plan_roll_calls[0].arrival, plan_roll_calls[0].departure)
             elif plan.second_period_start is None and plan_roll_calls.count() > 1:
                 stat = one_period_multiple_roll_calls(plan, plan_roll_calls)
@@ -588,12 +663,13 @@ def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests
 def create_employee_timeline_report(employee: Employee):
     employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
     roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
+    imperfect_roll_calls = employee.rollcall_set.filter(Q(departure__isnull=True) | Q(arrival__isnull=True))
     plans = employee.work_shift.workshiftplan_set.all().order_by("date")
     timetable = []
     for plan in plans:
         plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
-        plan_traffics=employee_requests.filter(date=plan.date,category=EmployeeRequest.CATEGORY_MANUAL_TRAFFIC)
-        # plan_roll_calls.
+        plan_traffics = employee_requests.filter(date=plan.date, category=EmployeeRequest.CATEGORY_MANUAL_TRAFFIC)
+        plan_roll_calls = list(plan_roll_calls).extend(calculate_total_roll_calls_and_traffics(imperfect_roll_calls.filter(date=plan.date).order_by("arrival"), plan_traffics))
         # fixme filter requests by date
         #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
         today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
@@ -624,55 +700,14 @@ def create_employee_traffic_report(employee: Employee):
     return timetable
 
 
-def calculate_total_roll_calls_and_traffics(roll_calls: QuerySet[RollCall], traffics: QuerySet[EmployeeRequest]):
-    calculated_roll_calls = []
-    arrives = []
-    departs = []
-    employee = roll_calls[0].employee
-    date = roll_calls[0].date
-    for r in roll_calls:
-        if r.arrival:
-            arrives.append(r.arrival)
-        elif r.departure:
-            departs.append(r.departure)
-        else:
-            raise ValidationError("roll call has no arrival or departure")
-    for t in traffics:
-        if t.manual_traffic_type == EmployeeRequest.Login:
-            arrives.append(t.time)
-        elif t.manual_traffic_type == EmployeeRequest.Logout:
-            departs.append(t.time)
-        else:
-            raise ValidationError("manual traffic type is not acceptable")
-    arrives.sort(reverse=True)
-    departs.sort(reverse=True)
-
-    for a in arrives:
-        nearest_departure = last_duration = None
-        for d in departs:
-            if a > d:
-                break
-            duration = subtract_times(a, d)
-            if last_duration is None or duration < last_duration:
-                last_duration = duration
-                nearest_departure = d
-        if nearest_departure is not None:
-            calculated_roll_calls.append(RollCall(
-                employee=employee,
-                date=date,
-                arrival=a,
-                departure=nearest_departure,
-            ))
-            departs.remove(nearest_departure)
-    return calculated_roll_calls
-
-
 def create_employee_total_report(employee: Employee):
     absent = {}
     overtime = {}
     burned_out = {}
     # todo add date in [start, end] filter parameter
-    employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
+    employee_requests = employee.employeerequest_set.filter(
+        # todo Q(date__in=[start, end])|Q(end_date__in=[start, end]),
+        status=EmployeeRequest.STATUS_APPROVED, )
     roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
     plans = employee.work_shift.workshiftplan_set.all().order_by("date")
     result = {"data": []}

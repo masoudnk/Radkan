@@ -265,7 +265,6 @@ class EmployerMessageOutputSerializer(serializers.ModelSerializer):
 
 
 class EmployeeDashboardSerializer(serializers.ModelSerializer):
-    # todo send workplaces with lat and longs
     workplace = WorkplaceOutputSerializer(many=True)
 
     class Meta:
