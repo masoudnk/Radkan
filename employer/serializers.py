@@ -265,6 +265,9 @@ class EmployerMessageOutputSerializer(serializers.ModelSerializer):
 
 
 class EmployeeDashboardSerializer(serializers.ModelSerializer):
+    # todo send workplaces with lat and longs
+    workplace = WorkplaceOutputSerializer(many=True)
+
     class Meta:
         model = Employee
         exclude = ("employer_id", "password")
@@ -277,9 +280,21 @@ class RadkanMessageSerializer(serializers.ModelSerializer):
 
 
 class RollCallSerializer(serializers.ModelSerializer):
+    date = JDateField()
+
     class Meta:
         model = RollCall
         exclude = ()
+
+
+class RollCallDepartureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RollCall
+        fields = (
+            "departure",
+            "departure_latitude",
+            "departure_longitude",
+        )
 
 
 class RollCallOutputSerializer(serializers.ModelSerializer):
@@ -560,7 +575,7 @@ class ManagerOutputSerializer(serializers.ModelSerializer):
 
 class DailyStatusSerializer(serializers.Serializer):
     date = serializers.CharField(source='get_date')
-    weekday=serializers.CharField(source="get_weekday")
+    weekday = serializers.CharField(source="get_weekday")
     middle_overtime = serializers.IntegerField()
     attend = serializers.IntegerField()
     overtime = serializers.IntegerField()

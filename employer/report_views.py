@@ -1,12 +1,12 @@
 from django.core.exceptions import ValidationError
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils.timezone import now
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
-from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest, Workplace
+from employer.models import Employee, RollCall, WorkShiftPlan, EmployeeRequest
 from employer.serializers import AttendeesSerializer, AbsenteesSerializer, DailyStatusSerializer
 from employer.utilities import subtract_times, calculate_roll_call_query_duration, calculate_daily_shift_duration, total_minute_to_hour_and_minutes, send_response_file, \
     REPORT_PERMISSION_STR, calculate_hourly_request_duration, calculate_daily_request_duration, DASHBOARD_PERMISSION_STR, positive_only
@@ -576,7 +576,7 @@ def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests
                     stat.overtime += min(this_overtime, plan.daily_overtime_limit)
                     if this_overtime > plan.daily_overtime_limit:
                         stat.burned_out["floating_shift_overtime"] = this_overtime - plan.daily_overtime_limit
-            #todo else add absent?
+            # todo else add absent?
 
         else:
             stat.add_absent(plan.daily_duty_duration)
@@ -592,6 +592,8 @@ def create_employee_timeline_report(employee: Employee):
     timetable = []
     for plan in plans:
         plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
+        plan_traffics=employee_requests.filter(date=plan.date,category=EmployeeRequest.CATEGORY_MANUAL_TRAFFIC)
+        # plan_roll_calls.
         # fixme filter requests by date
         #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
         today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
@@ -620,6 +622,49 @@ def create_employee_traffic_report(employee: Employee):
         b.update(a)
         timetable.append(b)
     return timetable
+
+
+def calculate_total_roll_calls_and_traffics(roll_calls: QuerySet[RollCall], traffics: QuerySet[EmployeeRequest]):
+    calculated_roll_calls = []
+    arrives = []
+    departs = []
+    employee = roll_calls[0].employee
+    date = roll_calls[0].date
+    for r in roll_calls:
+        if r.arrival:
+            arrives.append(r.arrival)
+        elif r.departure:
+            departs.append(r.departure)
+        else:
+            raise ValidationError("roll call has no arrival or departure")
+    for t in traffics:
+        if t.manual_traffic_type == EmployeeRequest.Login:
+            arrives.append(t.time)
+        elif t.manual_traffic_type == EmployeeRequest.Logout:
+            departs.append(t.time)
+        else:
+            raise ValidationError("manual traffic type is not acceptable")
+    arrives.sort(reverse=True)
+    departs.sort(reverse=True)
+
+    for a in arrives:
+        nearest_departure = last_duration = None
+        for d in departs:
+            if a > d:
+                break
+            duration = subtract_times(a, d)
+            if last_duration is None or duration < last_duration:
+                last_duration = duration
+                nearest_departure = d
+        if nearest_departure is not None:
+            calculated_roll_calls.append(RollCall(
+                employee=employee,
+                date=date,
+                arrival=a,
+                departure=nearest_departure,
+            ))
+            departs.remove(nearest_departure)
+    return calculated_roll_calls
 
 
 def create_employee_total_report(employee: Employee):
@@ -781,7 +826,7 @@ def get_employees_leave_excel(request, **kwargs):
     # todo filter to month and year
     employees = Employee.objects.filter(employer_id=request.user.id)
     result = [["کد", "نام", "استفاده ماهانه", "استفاده سالانه", "تعداد ماهانه", "تعداد سالانه", "مانده ماهانه", "مانده سالانه", ]]
-    cols = ["personnel_code","employee","monthly_used","yearly_used","monthly_count","yearly_count","monthly_remained","yearly_remained",]
+    cols = ["personnel_code", "employee", "monthly_used", "yearly_used", "monthly_count", "yearly_count", "monthly_remained", "yearly_remained", ]
     for employee in employees:
         data = [employee.personnel_code, employee.get_full_name()]
         row = filter_employee_and_lives(employee, kwargs)
@@ -789,7 +834,6 @@ def get_employees_leave_excel(request, **kwargs):
             data.append(row[key])
         result.append(data)
     return send_response_file(result, 'personnel_leave')
-
 
 
 def filter_project_traffic(request):

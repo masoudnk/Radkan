@@ -6,17 +6,22 @@ from rest_framework.response import Response
 from employer.models import Employee, EmployeeRequest, RollCall, RadkanMessage, RadkanMessageViewInfo
 from employer.report_views import create_employee_total_report
 from employer.serializers import EmployeeDashboardSerializer, RollCallSerializer, EmployeeRequestOutputSerializer, WorkShiftPlanOutputSerializer, RollCallOutputSerializer, \
-    RadkanMessageSerializer
+    RadkanMessageSerializer, RollCallDepartureSerializer
 from employer.views import manage_and_create_employee_request, POST_METHOD_STR
 
 
 @api_view([POST_METHOD_STR])
 def create_roll_call(request):
     cpy_data = request.data.copy()
-    ser = RollCallSerializer(data=cpy_data)
-    if ser.is_valid():
-        ser.save()
-        return Response(ser.data, status=status.HTTP_201_CREATED)
+    cpy_data["employee"] = request.user.id
+    roll_calls = RollCall.objects.filter(employee_id=request.user.id, date=request.data['date'])
+    if roll_calls.exists() and roll_calls.last().departure is None:
+        ser = RollCallDepartureSerializer(data=request.data, instance=roll_calls.last(), partial=True)
+    else:
+        ser = RollCallSerializer(data=cpy_data, context={'request': request})
+    if ser.is_valid(raise_exception=True):
+        r = ser.save()
+        return Response(RollCallOutputSerializer(r).data, status=status.HTTP_201_CREATED)
     return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
