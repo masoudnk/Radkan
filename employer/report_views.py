@@ -128,9 +128,7 @@ class DailyStatus:
                     self.burned_out["middle_overtime"] = burn_out
 
     def calculate_all_overtimes(self):
-        # fixme is this true?
         self.recalculate_floating_time()
-
         self.calculate_ending_overtime()
         self.calculate_beginning_overtime()
         self.calculate_middle_overtime()
@@ -141,6 +139,15 @@ class DailyStatus:
     #         else:
     #             acceptable_overtime = self.plan.middle_overtime
     #         self.middle_overtime += min(self.second_period_early_arrival, acceptable_overtime)
+
+
+class ReportCrucial:
+    def __init__(self, employee: Employee, kwargs):
+        self.date_period = [kwargs["start"], kwargs["end"]]
+        self.requests = employee.employeerequest_set.filter(Q(date__in=self.date_period) | Q(end_date__in=self.date_period), status=EmployeeRequest.STATUS_APPROVED, )
+        self.roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), date__in=self.date_period).order_by("date")
+        self.plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+        self.imperfect_roll_calls = employee.rollcall_set.filter(Q(departure__isnull=True) | Q(arrival__isnull=True), date__in=self.date_period).order_by("date")
 
 
 def calculate_total_roll_calls_and_traffics(roll_calls: QuerySet[RollCall], traffics: QuerySet[EmployeeRequest]):
@@ -191,36 +198,39 @@ def calculate_total_roll_calls_and_traffics(roll_calls: QuerySet[RollCall], traf
 def get_employer_dashboard(request, **kwargs):
     shifts = WorkShiftPlan.objects.filter(date=now()).values_list("work_shift", flat=True)
     employees = Employee.objects.filter(work_shift__in=shifts).distinct()
-    # todo write aggregations for these queries
-    today_roll_calls = RollCall.objects.filter(arrival__lte=now(),
-                                               # fixme for test purposes
-                                               #  date=now(),
-                                               employee__in=employees).distinct("employee")
-    attendees = today_roll_calls.filter(departure__isnull=True, )
-    absentees = today_roll_calls.filter(departure__isnull=False, )
+    today_roll_calls = RollCall.objects.filter(arrival__lte=now(), date=now(), employee__in=employees, departure__isnull=True, ).distinct("employee")
+    attendees = []
+    absentees = []
+    for emp in employees:
+        if today_roll_calls.filter(employee=emp).exists():
+            attendees.append(emp)
+        else:
+            absentees.append(emp)
+    # attendees = today_roll_calls.filter(departure__isnull=True, )
+    # absentees = today_roll_calls.filter(departure__isnull=False, )
 
     attendees_ser = AttendeesSerializer(attendees, many=True)
     absentees_ser = AbsenteesSerializer(absentees, many=True)
-    return Response({"attendees": attendees_ser.data, "absentees": absentees_ser.data, "attendees_count": attendees.count(), "absentees_count": absentees.count(),
+    return Response({"attendees": attendees_ser.data, "absentees": absentees_ser.data, "attendees_count": len(attendees), "absentees_count": len(absentees),
                      "total_employees_count": employees.count()}, status=status.HTTP_200_OK)
 
 
-def calculate_employee_requests(employee_requests, plans):
+def calculate_employee_requests(employee_requests, plans, kwargs):
     hourly_missions = employee_requests.filter(category=EmployeeRequest.CATEGORY_HOURLY_MISSION)
     daily_missions = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_MISSION)
-    missions = calculate_hourly_request_duration(hourly_missions) + calculate_daily_request_duration(daily_missions, plans)
+    missions = calculate_hourly_request_duration(hourly_missions) + calculate_daily_request_duration(daily_missions, plans, kwargs)
 
     hourly_earned_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE)
     daily_earned_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE)
-    earned_leave = calculate_daily_request_duration(daily_earned_leave, plans) + calculate_hourly_request_duration(hourly_earned_leave)
+    earned_leave = calculate_daily_request_duration(daily_earned_leave, plans, kwargs) + calculate_hourly_request_duration(hourly_earned_leave)
 
     hourly_sick_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE)
     daily_sick_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE)
-    sick_leave = calculate_daily_request_duration(daily_sick_leave, plans) + calculate_hourly_request_duration(hourly_sick_leave)
+    sick_leave = calculate_daily_request_duration(daily_sick_leave, plans, kwargs) + calculate_hourly_request_duration(hourly_sick_leave)
 
     hourly_unpaid_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE)
     daily_unpaid_leave = employee_requests.filter(category=EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE)
-    unpaid_leave = calculate_hourly_request_duration(hourly_unpaid_leave) + calculate_daily_request_duration(daily_unpaid_leave, plans)
+    unpaid_leave = calculate_hourly_request_duration(hourly_unpaid_leave) + calculate_daily_request_duration(daily_unpaid_leave, plans, kwargs)
 
     return {"missions": total_minute_to_hour_and_minutes(missions), "earned_leave": total_minute_to_hour_and_minutes(earned_leave),
             "sick_leave": total_minute_to_hour_and_minutes(sick_leave), "unpaid_leave": total_minute_to_hour_and_minutes(unpaid_leave),
@@ -448,7 +458,6 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
 #     earned = {}
 #     sick = {}
 #     unpaid = {}
-#     # todo add date in [start, end] filter parameter
 #     roll_calls = RollCall.objects.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), employee_id=employee.id, )
 #     employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
 #
@@ -473,8 +482,6 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
 #         plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
 #         timetable = plan_roll_calls.values_list("arrival", "departure", )
 #         print(timetable)
-#         # fixme filter requests by date
-#         #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
 #         todays_e_requests = employee_requests
 #
 #         if todays_e_requests.exists():
@@ -505,8 +512,6 @@ def two_period_multiple_roll_calls(plan: WorkShiftPlan, roll_calls, ):
 #             if plan.plan_type == WorkShiftPlan.SIMPLE_PLAN_TYPE:
 #                 this_overtime = this_absent = this_early_arrival = this_late_arrival = this_early_departure = this_late_departure = 0
 #                 for roll_call in plan_roll_calls:
-#                     # todo if plan have second shift
-#                     #  if roll_call.arrival > plan.first_period_end => second shift
 #                     if roll_call.arrival > plan.first_period_start:
 #                         this_late_arrival = subtract_times(plan.first_period_start, roll_call.arrival)
 #                         if plan.permitted_delay is not None and plan.permitted_delay > 0:
@@ -651,7 +656,8 @@ def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests
                     stat.overtime += min(this_overtime, plan.daily_overtime_limit)
                     if this_overtime > plan.daily_overtime_limit:
                         stat.burned_out["floating_shift_overtime"] = this_overtime - plan.daily_overtime_limit
-            # todo else add absent?
+            elif total_minutes < plan.daily_duty_duration:
+                stat.add_absent(plan.daily_duty_duration - total_minutes)
 
         else:
             stat.add_absent(plan.daily_duty_duration)
@@ -660,60 +666,59 @@ def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests
     return stat
 
 
-def create_employee_timeline_report(employee: Employee):
-    employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
-    roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
-    imperfect_roll_calls = employee.rollcall_set.filter(Q(departure__isnull=True) | Q(arrival__isnull=True))
-    plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+def create_employee_timeline_report(employee: Employee, kwargs):
+    # employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
+    # roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
+    # imperfect_roll_calls = employee.rollcall_set.filter(Q(departure__isnull=True) | Q(arrival__isnull=True))
+    # plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+    report = ReportCrucial(employee, kwargs)
     timetable = []
-    for plan in plans:
-        plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
-        plan_traffics = employee_requests.filter(date=plan.date, category=EmployeeRequest.CATEGORY_MANUAL_TRAFFIC)
-        plan_roll_calls = list(plan_roll_calls).extend(calculate_total_roll_calls_and_traffics(imperfect_roll_calls.filter(date=plan.date).order_by("arrival"), plan_traffics))
-        # fixme filter requests by date
-        #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
-        today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
-                                                                                EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ])
+    for plan in report.plans:
+        plan_roll_calls = report.roll_calls.filter(date=plan.date).order_by("arrival")
+        plan_traffics = report.requests.filter(date=plan.date, category=EmployeeRequest.CATEGORY_MANUAL_TRAFFIC)
+        plan_roll_calls = list(plan_roll_calls).extend(
+            calculate_total_roll_calls_and_traffics(report.imperfect_roll_calls.filter(date=plan.date).order_by("arrival"), plan_traffics))
+        today_hourly_employee_requests = report.requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
+                                                                              EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ])
         stat = create_employee_daily_report(plan, plan_roll_calls, today_hourly_employee_requests)
         timetable.append(stat)
     return timetable
 
 
-def create_employee_traffic_report(employee: Employee):
-    employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
-    roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
-    plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+def create_employee_traffic_report(employee: Employee, kwargs):
+    # date_period = [kwargs["start"], kwargs["end"]]
+    # employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
+    # roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), date__in=date_period, )
+    # plans = employee.work_shift.workshiftplan_set.filter(date__in=date_period).order_by("date")
+    report = ReportCrucial(employee, kwargs)
     timetable = []
-    for plan in plans:
-        plan_roll_calls = roll_calls.filter(date=plan.date).order_by("arrival")
-        # fixme filter requests by date
-        #  todays_e_requests = employee_requests.filter(Q(date=plan.date) | Q(date__lte=plan.date, end_date__gte=plan.date))
-        today_hourly_employee_requests = employee_requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
-                                                                                EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ],
-                                                                  date=plan.date)
+    for plan in report.plans:
+        plan_roll_calls = report.roll_calls.filter(date=plan.date).order_by("arrival")
+        today_hourly_employee_requests = report.requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
+                                                                              EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ],
+                                                                date=plan.date)
         stat = create_employee_daily_report(plan, plan_roll_calls, today_hourly_employee_requests)
         a = DailyStatusSerializer(stat).data
         a["burned_out"] = sum(stat.burned_out.values())
-        b = calculate_employee_requests(today_hourly_employee_requests, plans)
+        b = calculate_employee_requests(today_hourly_employee_requests, report.plans, kwargs)
         b.update(a)
         timetable.append(b)
     return timetable
 
 
-def create_employee_total_report(employee: Employee):
+def create_employee_total_report(employee: Employee, kwargs):
+    # date_period = [kwargs["start"], kwargs["end"]]
     absent = {}
     overtime = {}
     burned_out = {}
-    # todo add date in [start, end] filter parameter
-    employee_requests = employee.employeerequest_set.filter(
-        # todo Q(date__in=[start, end])|Q(end_date__in=[start, end]),
-        status=EmployeeRequest.STATUS_APPROVED, )
-    roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
-    plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+    report = ReportCrucial(employee, kwargs)
+    # employee_requests = employee.employeerequest_set.filter(Q(date__in=date_period) | Q(end_date__in=date_period), status=EmployeeRequest.STATUS_APPROVED, )
+    # roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), date__in=date_period).order_by("date")
+    # plans = employee.work_shift.workshiftplan_set.filter(date__in=date_period).order_by("date")
     result = {"data": []}
-    result.update(calculate_employee_requests(employee_requests, plans))
+    result.update(calculate_employee_requests(report.requests, report.plans, kwargs))
     # ---------------------------------------------
-    timeline = create_employee_timeline_report(employee)
+    timeline = create_employee_timeline_report(employee, kwargs)
     for stat in timeline:
         if stat.absent > 0:
             absent[stat.get_date()] = stat.absent
@@ -724,11 +729,11 @@ def create_employee_total_report(employee: Employee):
             burned_out[stat.get_date()] = total_burned_out
 
     result.update({
-        "total_attend": total_minute_to_hour_and_minutes(calculate_roll_call_query_duration(roll_calls)[2]),
+        "total_attend": total_minute_to_hour_and_minutes(calculate_roll_call_query_duration(report.roll_calls)[2]),
         "total_absent": total_minute_to_hour_and_minutes(sum(absent.values())),
         "total_overtime": total_minute_to_hour_and_minutes(sum(overtime.values())),
         "total_burned_out": total_minute_to_hour_and_minutes(sum(burned_out.values())),
-        "days_attended": roll_calls.distinct("date").count(),
+        "days_attended": report.roll_calls.distinct("date").count(),
         "employee": employee.get_full_name(),
         "employee_id": employee.id,
         # "absent": absent,
@@ -744,7 +749,7 @@ def filter_employees_and_their_requests(request, **kwargs):  # a view request
     employees = Employee.objects.filter(employer_id=kwargs['employer'])
     result = []
     for employee in employees:
-        result.append(create_employee_total_report(employee))
+        result.append(create_employee_total_report(employee, kwargs))
     return result
 
 
@@ -770,7 +775,7 @@ def get_employees_function_report_excel(request, **kwargs):
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employee_report(request, oid, **kwargs):
     employee = get_object_or_404(Employee, id=oid, employer_id=kwargs["employer"])
-    report = create_employee_total_report(employee)
+    report = create_employee_total_report(employee, kwargs)
     return Response(report, status=status.HTTP_200_OK)
 
 
@@ -792,7 +797,7 @@ def get_leave_requests(employee: Employee, year):
 def report_employee_traffic(request, oid, **kwargs):
     # todo filter by date too
     emp = get_object_or_404(Employee, id=oid, employer_id=kwargs.get("employer"))
-    report = create_employee_traffic_report(emp)
+    report = create_employee_traffic_report(emp, kwargs)
     return Response(report, status=status.HTTP_200_OK)
 
 
@@ -801,7 +806,7 @@ def report_employee_traffic(request, oid, **kwargs):
 def get_employee_traffic_report_excel(request, oid, **kwargs):
     # todo filter by date too
     emp = get_object_or_404(Employee, id=oid, employer_id=kwargs.get("employer"))
-    report = create_employee_traffic_report(emp)
+    report = create_employee_traffic_report(emp, kwargs)
     cols = ["date", "weekday", "attend", "absent", "earned_leave", "sick_leave", "unpaid_leave", "overtime", "burned_out", "missions"]
     data = [["تاریخ", "روز هفته", "کل حضور", "غیبت", "مرخصی استحقاقی", "مرخصی استعلاجی", "مرخصی بی حقوق", "اضافه کار", "مازاد حضور", "ماموریت", ]]
     for row in report:
@@ -814,8 +819,8 @@ def filter_employee_and_lives(employee, kwargs):
     plans = employee.work_shift.workshiftplan_set.all().order_by("date")
     yearly = get_leave_requests(employee, kwargs.get("year"))
     monthly = yearly.filter(date__month=kwargs.get("month"))
-    monthly_used = sum(calculate_employee_requests(monthly, plans)["integers"].values())
-    yearly_used = sum(calculate_employee_requests(yearly, plans)["integers"].values())
+    monthly_used = sum(calculate_employee_requests(monthly, plans, kwargs)["integers"].values())
+    yearly_used = sum(calculate_employee_requests(yearly, plans, kwargs)["integers"].values())
     lp = employee.work_policy.earnedleavepolicy
     if lp:
         lp_m = lp.maximum_hour_per_month * 60 + lp.maximum_minute_per_month

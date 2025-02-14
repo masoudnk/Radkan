@@ -10,7 +10,7 @@ from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
 from phonenumber_field.modelfields import PhoneNumberField
 
-from employer.utilities import get_random_int_code, national_code_validation, mobile_validator
+from employer.utilities import get_random_int_code, national_code_validation, mobile_validator, time_is_passed_validator, date_is_not_future_validator
 
 
 class LegalEntityType(models.Model):
@@ -533,9 +533,9 @@ class TicketConversation(models.Model):
 
 class RollCall(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
-    date = jmodels.jDateField()
-    arrival = models.TimeField(null=True, blank=True)
-    departure = models.TimeField(null=True, blank=True)
+    date = jmodels.jDateField(validators=[date_is_not_future_validator])
+    arrival = models.TimeField(null=True, blank=True,validators=[time_is_passed_validator,])
+    departure = models.TimeField(null=True, blank=True,validators=[time_is_passed_validator,])
     arrival_latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی', null=True, blank=True)
     arrival_longitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='طول جغرافیایی', null=True, blank=True)
     departure_latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی', null=True, blank=True)

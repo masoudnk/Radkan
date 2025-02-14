@@ -1,11 +1,13 @@
 import random
 import re
+from datetime import timezone
 
 import jdatetime
 import pandas as pd
 from django.core.exceptions import ValidationError
 from django.db.models import ExpressionWrapper, Sum, DurationField, F, Q
 from django.http import HttpResponse
+from django.utils import timezone
 
 POST_METHOD_STR = "POST"
 GET_METHOD_STR = "GET"
@@ -56,9 +58,13 @@ def str_to_time(string):
     return jdatetime.datetime.strptime(string, TIME_FORMAT_STR).time()
 
 
-def calculate_daily_request_duration(employee_requests, plans):
+def calculate_daily_request_duration(employee_requests, plans, kwargs):
     total_duration = 0
     for emp_req in employee_requests:
+        if emp_req.date < kwargs["start"]:
+            emp_req.date = kwargs["start"]
+        if emp_req.to_date > kwargs["end"]:
+            emp_req.to_date = kwargs["end"]
         this_plans = plans.filter(Q(date__gte=emp_req.date) | Q(date__lte=emp_req.to_date))
         for plan in this_plans:
             total_duration += calculate_daily_shift_duration(plan)
@@ -153,6 +159,16 @@ def mobile_validator(phone_number: str):
     pattern = "^(?:(?:(?:\\+?|00)(98))|(0))?((?:90|91|92|93|99)[0-9]{8})$"
     if not re.match(pattern, phone_number):
         raise ValidationError("شماره موبایل نادرست است.")
+
+
+def time_is_passed_validator(time):
+    if time > timezone.localtime().time():
+        raise ValidationError("امکان انتخاب زمان آینده وجود ندارد")
+
+
+def date_is_not_future_validator(date):
+    if date > timezone.localdate().today():
+        raise ValidationError("امکان انتخاب تاریخ آینده وجود ندارد")
 
 
 def positive_only(func):
