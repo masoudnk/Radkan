@@ -153,9 +153,9 @@ def send_response_file(data, file_name, file_format='excel'):
 def mobile_validator(phone_number: str):
     phone_number = phone_number.replace("+", "00")
     if not phone_number.isdecimal():
-        raise ValidationError("phone number must be a decimal number")
+        raise ValidationError("شماره موبایل شامل کاراکترهای غیر مجاز است")
     if len(phone_number) < 10:
-        raise ValidationError("phone number must be at least 10 digits")
+        raise ValidationError("شماره موبایل باید حداقل 10 رقم باشد")
     pattern = "^(?:(?:(?:\\+?|00)(98))|(0))?((?:90|91|92|93|99)[0-9]{8})$"
     if not re.match(pattern, phone_number):
         raise ValidationError("شماره موبایل نادرست است.")

@@ -673,8 +673,8 @@ def update_ticket_status(request, oid):
 def manage_and_create_employee_request(cpy_data):
     # todo raise error if selected date or time has roll_call
     category = int(cpy_data["category"])
-    employee=get_object_or_404(Employee,id=cpy_data["employee_id"])
-    work_shift_plans=employee.work_shift.workshiftplan_set.all()
+    employee = get_object_or_404(Employee, id=cpy_data["employee_id"])
+    work_shift_plans = employee.work_shift.workshiftplan_set.all()
     if category == EmployeeRequest.CATEGORY_MANUAL_TRAFFIC:
         try:
             plan = work_shift_plans.get(date=cpy_data['date'])
@@ -690,9 +690,18 @@ def manage_and_create_employee_request(cpy_data):
             plan = work_shift_plans.get(date=cpy_data['date'])
         except WorkShiftPlan.DoesNotExist:
             return Response({"date": "تاریخ جزو شیفت نیست"})
-        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
-                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
-            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+        if plan.first_period_start < str_to_time(cpy_data['time']) < plan.first_period_end:
+            if  not (plan.first_period_start < str_to_time(cpy_data['to_time']) < plan.first_period_end) :
+                return Response({"to_time": "ساعت جزو ساعات شیفت نیست"})
+        else:
+            if plan.second_period_start:
+                if not (plan.second_period_start < str_to_time(cpy_data['time']) < plan.second_period_end):
+                    return Response({"time": "ساعت جزو ساعات شیفت نیست"})
+                elif not (plan.second_period_start < str_to_time(cpy_data['to_time']) < plan.second_period_end):
+                    return Response({"time": "ساعت جزو ساعات شیفت نیست"})
+            else:
+                return Response({"time": "ساعت جزو ساعات شیفت نیست"})
+
         ser = EmployeeRequestHourlyEarnedLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_EARNED_LEAVE:
         start_date = date(*[int(d) for d in cpy_data['date'].split("-")])
