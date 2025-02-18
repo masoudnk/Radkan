@@ -3,9 +3,12 @@ import uuid
 
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, _user_has_perm, _user_has_module_perms
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator, int_list_validator, MaxValueValidator
 from django.db import models
+from django.db.models import Q
 from django_jalali.db import models as jmodels
+from jdatetime import timedelta
 from mptt.fields import TreeForeignKey
 from mptt.models import MPTTModel
 from phonenumber_field.modelfields import PhoneNumberField
@@ -105,9 +108,9 @@ class ResetPasswordRequest(models.Model):
 class Manager(User):
     employer_id = models.PositiveIntegerField()
     expiration_date = jmodels.jDateTimeField()
+
     class Meta:
         permissions = (("view_dashboard", "Can view dashboard"),)
-
 
 
 class Employer(User):
@@ -390,6 +393,8 @@ class EmployeeRequest(models.Model):
     CATEGORY_DAILY_UNPAID_LEAVE = 10
     CATEGORY_PROJECT_MANUAL_TRAFFIC = 11
     CATEGORY_SHIFT_ROTATION = 12
+    HOURLY_REQUESTS_LIST = [CATEGORY_HOURLY_MISSION, CATEGORY_HOURLY_EARNED_LEAVE, CATEGORY_HOURLY_UNPAID_LEAVE, CATEGORY_HOURLY_SICK_LEAVE, ]
+    DAILY_REQUESTS_LIST = [CATEGORY_DAILY_EARNED_LEAVE, CATEGORY_DAILY_MISSION, CATEGORY_DAILY_SICK_LEAVE, CATEGORY_DAILY_UNPAID_LEAVE]
 
     CATEGORY_CHOICES = {
         CATEGORY_MANUAL_TRAFFIC: "تردد دستی",
@@ -438,6 +443,56 @@ class EmployeeRequest(models.Model):
     attachment = models.FileField(upload_to=get_file_path, max_length=200, null=True, blank=True)
     project = models.ForeignKey("Project", on_delete=models.PROTECT, null=True, blank=True)
     other_employee = models.ForeignKey("Employee", related_name="other_employee", on_delete=models.PROTECT, null=True, blank=True)
+
+    def clean(self):
+        # todo add CATEGORY_PROJECT_MANUAL_TRAFFIC validations
+        if self.category == self.CATEGORY_MANUAL_TRAFFIC:
+            try:
+                plan = self.employee.work_shift.workshiftplan_set.get(date=self.date)
+            except WorkShiftPlan.DoesNotExist:
+                raise ValidationError("تاریخ انتخاب شده جزو شیفت کارمند نیست")
+        elif self.category in self.HOURLY_REQUESTS_LIST:
+            roll_calls = RollCall.objects.filter(employee=self.employee, date=self.date)
+            for roll_call in roll_calls:
+                if (roll_call.arrival < self.time < roll_call.departure or roll_call.arrival < self.to_time < roll_call.departure
+                        or self.time < roll_call.arrival < self.to_time or self.time < roll_call.departure < self.to_time):
+                    raise ValidationError("کارمند در بازه انتخاب شده، حضور داشته است")
+            if self.to_time < self.time:
+                raise ValidationError("ساعت شروع بعد از ساعت پایان است!")
+            try:
+                plan = self.employee.work_shift.workshiftplan_set.get(date=self.date)
+            except WorkShiftPlan.DoesNotExist:
+                raise ValidationError("تاریخ انتخاب شده جزو شیفت کارمند نیست")
+            if self.time < plan.first_period_start or self.time > plan.second_period_end:
+                raise ValidationError("ساعت شروع، خارج از شیفت کاری کارمند است")
+            if plan.second_period_start:
+                if plan.first_period_end < self.time < plan.second_period_start:
+                    raise ValidationError("ساعت شروع، خارج از شیفت کاری کارمند است")
+            if self.to_time > plan.first_period_end or self.to_time > plan.second_period_end:
+                raise ValidationError("ساعت پایان، خارج از شیفت کاری کارمند است")
+            if plan.second_period_start:
+                if plan.first_period_end < self.to_time < plan.second_period_start:
+                    raise ValidationError("ساعت پایان، خارج از شیفت کاری کارمند است")
+        elif self.category in self.DAILY_REQUESTS_LIST:
+            roll_calls = RollCall.objects.filter(Q(date__gte=self.date) | Q(date__lte=self.end_date), employee=self.employee, )
+            if roll_calls:
+                raise ValidationError("کارمند در بازه انتخاب شده، حضور داشته است")
+            plans = self.employee.work_shift.workshiftplan_set.filter(Q(date__gte=self.date) | Q(date__lte=self.end_date))
+            if not plans:
+                raise ValidationError("کارمند در روزهای انتخاب شده، شیفتی ندارد")
+            start_date = self.date
+            end_date = self.end_date
+            delta = timedelta(days=1)
+            dates = []
+            while start_date <= end_date:
+                dates.append(start_date.isoformat())
+                start_date += delta
+            plans = WorkShiftPlan.objects.filter(date__in=dates)
+            if plans.count() != len(dates):
+                raise ValidationError("تاریخ جزو شیفت نیست")
+
+            super().clean()
+
 
 
 class Project(models.Model):
@@ -534,8 +589,8 @@ class TicketConversation(models.Model):
 class RollCall(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
     date = jmodels.jDateField(validators=[date_is_not_future_validator])
-    arrival = models.TimeField(null=True, blank=True,validators=[time_is_passed_validator,])
-    departure = models.TimeField(null=True, blank=True,validators=[time_is_passed_validator,])
+    arrival = models.TimeField(null=True, blank=True, validators=[time_is_passed_validator, ])
+    departure = models.TimeField(null=True, blank=True, validators=[time_is_passed_validator, ])
     arrival_latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی', null=True, blank=True)
     arrival_longitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='طول جغرافیایی', null=True, blank=True)
     departure_latitude = models.DecimalField(max_digits=17, decimal_places=14, verbose_name='عرض جغرافیایی', null=True, blank=True)

@@ -57,9 +57,9 @@ def get_employee_requests_list(request, year, month):
 
 
 @api_view()
-def get_employee_report(request, year, month):
+def get_employee_report_for_employees(request):
     employee = get_object_or_404(Employee, id=request.user.id)
-    report = create_employee_total_report(employee)
+    report = create_employee_total_report(employee,request.GET)
     return Response(report, status=status.HTTP_200_OK)
 
 

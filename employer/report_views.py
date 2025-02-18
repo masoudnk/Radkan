@@ -146,8 +146,20 @@ class ReportCrucial:
         self.date_period = [kwargs["start"], kwargs["end"]]
         self.requests = employee.employeerequest_set.filter(Q(date__in=self.date_period) | Q(end_date__in=self.date_period), status=EmployeeRequest.STATUS_APPROVED, )
         self.roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), date__in=self.date_period).order_by("date")
-        self.plans = employee.work_shift.workshiftplan_set.all().order_by("date")
+        self.plans = employee.work_shift.workshiftplan_set.filter(date__in=self.date_period).order_by("date")
         self.imperfect_roll_calls = employee.rollcall_set.filter(Q(departure__isnull=True) | Q(arrival__isnull=True), date__in=self.date_period).order_by("date")
+
+    def get_employee_timeline(self):
+        timetable = []
+        for plan in self.plans:
+            plan_roll_calls = self.roll_calls.filter(date=plan.date).order_by("arrival")
+            plan_traffics = self.requests.filter(date=plan.date, category=EmployeeRequest.CATEGORY_MANUAL_TRAFFIC)
+            plan_roll_calls = list(plan_roll_calls).extend(
+                calculate_total_roll_calls_and_traffics(self.imperfect_roll_calls.filter(date=plan.date).order_by("arrival"), plan_traffics))
+            today_hourly_employee_requests = self.requests.filter(category__in=EmployeeRequest.HOURLY_REQUESTS_LIST)
+            stat = create_employee_daily_report(plan, plan_roll_calls, today_hourly_employee_requests)
+            timetable.append(stat)
+        return timetable
 
 
 def calculate_total_roll_calls_and_traffics(roll_calls: QuerySet[RollCall], traffics: QuerySet[EmployeeRequest]):
@@ -666,24 +678,6 @@ def create_employee_daily_report(plan, plan_roll_calls, hourly_employee_requests
     return stat
 
 
-def create_employee_timeline_report(employee: Employee, kwargs):
-    # employee_requests = employee.employeerequest_set.filter(status=EmployeeRequest.STATUS_APPROVED)
-    # roll_calls = employee.rollcall_set.filter(~(Q(departure__isnull=True) | Q(arrival__isnull=True)), )
-    # imperfect_roll_calls = employee.rollcall_set.filter(Q(departure__isnull=True) | Q(arrival__isnull=True))
-    # plans = employee.work_shift.workshiftplan_set.all().order_by("date")
-    report = ReportCrucial(employee, kwargs)
-    timetable = []
-    for plan in report.plans:
-        plan_roll_calls = report.roll_calls.filter(date=plan.date).order_by("arrival")
-        plan_traffics = report.requests.filter(date=plan.date, category=EmployeeRequest.CATEGORY_MANUAL_TRAFFIC)
-        plan_roll_calls = list(plan_roll_calls).extend(
-            calculate_total_roll_calls_and_traffics(report.imperfect_roll_calls.filter(date=plan.date).order_by("arrival"), plan_traffics))
-        today_hourly_employee_requests = report.requests.filter(category__in=[EmployeeRequest.CATEGORY_HOURLY_MISSION, EmployeeRequest.CATEGORY_HOURLY_EARNED_LEAVE,
-                                                                              EmployeeRequest.CATEGORY_HOURLY_UNPAID_LEAVE, EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE, ])
-        stat = create_employee_daily_report(plan, plan_roll_calls, today_hourly_employee_requests)
-        timetable.append(stat)
-    return timetable
-
 
 def create_employee_traffic_report(employee: Employee, kwargs):
     # date_period = [kwargs["start"], kwargs["end"]]
@@ -718,7 +712,7 @@ def create_employee_total_report(employee: Employee, kwargs):
     result = {"data": []}
     result.update(calculate_employee_requests(report.requests, report.plans, kwargs))
     # ---------------------------------------------
-    timeline = create_employee_timeline_report(employee, kwargs)
+    timeline = report.get_employee_timeline()
     for stat in timeline:
         if stat.absent > 0:
             absent[stat.get_date()] = stat.absent
@@ -795,7 +789,6 @@ def get_leave_requests(employee: Employee, year):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def report_employee_traffic(request, oid, **kwargs):
-    # todo filter by date too
     emp = get_object_or_404(Employee, id=oid, employer_id=kwargs.get("employer"))
     report = create_employee_traffic_report(emp, kwargs)
     return Response(report, status=status.HTTP_200_OK)
@@ -804,7 +797,6 @@ def report_employee_traffic(request, oid, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employee_traffic_report_excel(request, oid, **kwargs):
-    # todo filter by date too
     emp = get_object_or_404(Employee, id=oid, employer_id=kwargs.get("employer"))
     report = create_employee_traffic_report(emp, kwargs)
     cols = ["date", "weekday", "attend", "absent", "earned_leave", "sick_leave", "unpaid_leave", "overtime", "burned_out", "missions"]
@@ -850,7 +842,6 @@ def report_employee_leave(request, oid, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def report_employees_leave(request, **kwargs):
-    # todo filter to month and year
     employees = Employee.objects.filter(employer_id=request.user.id)
     result = []
     for employee in employees:
@@ -863,7 +854,6 @@ def report_employees_leave(request, **kwargs):
 @api_view()
 @check_user_permission(VIEW_PERMISSION_STR, REPORT_PERMISSION_STR)
 def get_employees_leave_excel(request, **kwargs):
-    # todo filter to month and year
     employees = Employee.objects.filter(employer_id=request.user.id)
     result = [["کد", "نام", "استفاده ماهانه", "استفاده سالانه", "تعداد ماهانه", "تعداد سالانه", "مانده ماهانه", "مانده سالانه", ]]
     cols = ["personnel_code", "employee", "monthly_used", "yearly_used", "monthly_count", "yearly_count", "monthly_remained", "yearly_remained", ]

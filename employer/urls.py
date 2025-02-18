@@ -116,7 +116,7 @@ urlpatterns = [
     path('get_message/<int:oid>/', employee_views.get_message, name='get_message'),
     path('get_roll_calls_list/<int:year>/<int:month>/', employee_views.get_roll_calls_list, name='get_roll_calls_list'),
     path('get_employee_requests_list/<int:year>/<int:month>/', employee_views.get_employee_requests_list, name='get_employee_requests_list'),
-    path('get_employee_report/<int:year>/<int:month>/', employee_views.get_employee_report, name='get_employee_report'),
+    path('get_employee_report_for_employees/', employee_views.get_employee_report_for_employees, name='get_employee_report_for_employees'),
 
     # -----------------------------------report_views-----------------------------
     path('report_employees_function/', report_views.report_employees_function, name='report_employees_function'),
