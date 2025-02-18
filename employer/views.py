@@ -720,9 +720,10 @@ def manage_and_create_employee_request(cpy_data):
             plan = work_shift_plans.get(date=cpy_data['date'])
         except WorkShiftPlan.DoesNotExist:
             return Response({"date": "تاریخ جزو شیفت نیست"})
-        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
-                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
-            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+        # fixme is mission bounded to plan hours?
+        # if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+        #         not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+        #     return Response({"date": "ساعت جزو ساعات شیفت نیست"})
         ser = EmployeeRequestHourlyMissionSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_MISSION:
         start_date = date(*[int(d) for d in cpy_data['date'].split("-")])
@@ -742,18 +743,30 @@ def manage_and_create_employee_request(cpy_data):
             plan = work_shift_plans.get(date=cpy_data['date'])
         except WorkShiftPlan.DoesNotExist:
             return Response({"date": "تاریخ جزو شیفت نیست"})
-        if (plan.first_period_start < cpy_data['time'] < plan.first_period_end or
-                (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
-            return Response({"date": "ساعت جزو ساعات شیفت است"})
+        # fixme is OVERTIME bounded to plan hours?
+        # if (plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+        #         (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+        #     return Response({"date": "ساعت جزو ساعات شیفت است"})
         ser = EmployeeRequestOvertimeSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_HOURLY_SICK_LEAVE:
         try:
             plan = work_shift_plans.get(date=cpy_data['date'])
         except WorkShiftPlan.DoesNotExist:
             return Response({"date": "تاریخ جزو شیفت نیست"})
-        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
-                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
-            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+        # if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+        #         not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+        #     return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+        if plan.first_period_start < str_to_time(cpy_data['time']) < plan.first_period_end:
+            if not (plan.first_period_start < str_to_time(cpy_data['to_time']) < plan.first_period_end):
+                return Response({"to_time": "ساعت جزو ساعات شیفت نیست"})
+        else:
+            if plan.second_period_start:
+                if not (plan.second_period_start < str_to_time(cpy_data['time']) < plan.second_period_end):
+                    return Response({"time": "ساعت جزو ساعات شیفت نیست"})
+                elif not (plan.second_period_start < str_to_time(cpy_data['to_time']) < plan.second_period_end):
+                    return Response({"time": "ساعت جزو ساعات شیفت نیست"})
+            else:
+                return Response({"time": "ساعت جزو ساعات شیفت نیست"})
 
         ser = EmployeeRequestHourlySickLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_SICK_LEAVE:
@@ -774,9 +787,20 @@ def manage_and_create_employee_request(cpy_data):
             plan = work_shift_plans.get(date=cpy_data['date'])
         except WorkShiftPlan.DoesNotExist:
             return Response({"date": "تاریخ جزو شیفت نیست"})
-        if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
-                not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
-            return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+        # if (not plan.first_period_start < cpy_data['time'] < plan.first_period_end or
+        #         not (plan.second_period_start and plan.second_period_start < cpy_data['to_time'] < plan.second_period_end)):
+        #     return Response({"date": "ساعت جزو ساعات شیفت نیست"})
+        if plan.first_period_start < str_to_time(cpy_data['time']) < plan.first_period_end:
+            if not (plan.first_period_start < str_to_time(cpy_data['to_time']) < plan.first_period_end):
+                return Response({"to_time": "ساعت جزو ساعات شیفت نیست"})
+        else:
+            if plan.second_period_start:
+                if not (plan.second_period_start < str_to_time(cpy_data['time']) < plan.second_period_end):
+                    return Response({"time": "ساعت جزو ساعات شیفت نیست"})
+                elif not (plan.second_period_start < str_to_time(cpy_data['to_time']) < plan.second_period_end):
+                    return Response({"time": "ساعت جزو ساعات شیفت نیست"})
+            else:
+                return Response({"time": "ساعت جزو ساعات شیفت نیست"})
 
         ser = EmployeeRequestHourlyUnpaidLeaveSerializer(data=cpy_data)
     elif category == EmployeeRequest.CATEGORY_DAILY_UNPAID_LEAVE:
